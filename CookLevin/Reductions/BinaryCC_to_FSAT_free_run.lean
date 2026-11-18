@@ -400,10 +400,8 @@ theorem emitBitsFromScan_run (BASE bound start : Nat) (bits : List Bool) (u : St
             Cmd.op (.concat WREG BASE KBIT) ;; emitFandTag ;; emitLitAt )
           KBIT (List.range bits.length) u := by
     rw [Cmd.eval_forBnd, hbnd]
-  show State.get (emitFtrue.eval ((Cmd.forBnd KBIT bound _).eval u)) SCAN = []
-    ∧ State.get (emitFtrue.eval ((Cmd.forBnd KBIT bound _).eval u)) OUT = _
-    ∧ (∀ r : Var, r ≠ SCAN → r ≠ OUT → r ≠ WREG → r ≠ TFLG → r ≠ KBIT →
-        State.get (emitFtrue.eval ((Cmd.forBnd KBIT bound _).eval u)) r = State.get u r)
+  unfold emitBitsFromScan
+  rw [Cmd.eval_seq]
   rw [heval]
   refine ⟨?_, ?_, ?_⟩
   · rw [emitFtrue_frame _ SCAN (by decide), hSCANl, List.drop_eq_nil_of_le (le_refl bits.length)]
@@ -480,7 +478,8 @@ theorem SBInv_step (BASE start : Nat) (bits : List Bool) (rest : List Nat)
   rcases Nat.lt_trichotomy i bits.length with hi | hi | hi
   · -- live bit iteration: consume one sentinel element, emit one tagged literal
     obtain ⟨hDONE, hSCAN, hOUT⟩ := hph1 (le_of_lt hi)
-    set w := st.set KBIT (List.replicate i 1) with hw
+    let w := st.set KBIT (List.replicate i 1)
+    rw [show st.set KBIT (List.replicate i 1) = w from rfl]
     have hwframe : ∀ r : Var, r ≠ KBIT → State.get w r = State.get st r :=
       fun r hr => State.get_set_ne _ _ _ _ hr
     have hwK : State.get w KBIT = List.replicate i 1 := State.get_set_eq _ _ _
@@ -495,10 +494,11 @@ theorem SBInv_step (BASE start : Nat) (bits : List Bool) (rest : List Nat)
     have hdrop : bits.drop i = bits[i] :: bits.drop (i + 1) := List.drop_eq_getElem_cons hi
     have htake : bits.take (i + 1) = bits.take i ++ [bits[i]] := by
       rw [List.take_add_one, List.getElem?_eq_getElem hi]; rfl
-    set b := bits[i] with hb
-    clear_value b
-    set T := FlatTCCFree.encSList (FlatCCBinFree.bitsNat (bits.drop (i + 1))) ++ rest
-      with hT
+    obtain ⟨b, hb⟩ : ∃ b, bits[i] = b := ⟨_, rfl⟩
+    rw [hb] at hdrop htake
+    let T := FlatTCCFree.encSList (FlatCCBinFree.bitsNat (bits.drop (i + 1))) ++ rest
+    have hT : T = FlatTCCFree.encSList (FlatCCBinFree.bitsNat (bits.drop (i + 1))) ++ rest :=
+      rfl
     have hSCANw : State.get w SCAN = 1 :: (List.replicate (cond b 1 0) 1 ++ 0 :: T) := by
       rw [hwframe SCAN (by decide), hSCAN, hdrop, hT]
       show (FlatTCCFree.encSElem (cond b 1 0)
@@ -509,7 +509,8 @@ theorem SBInv_step (BASE start : Nat) (bits : List Bool) (rest : List Nat)
     -- step 1: head EMARK SCAN  (the element marker `1`)
     have e1 : (Cmd.op (.head EMARK SCAN)).eval w = w.set EMARK [1] := by
       rw [Cmd.eval_op]; simp only [Op.eval, hSCANw]
-    set w1 := w.set EMARK [1] with hw1
+    let w1 := w.set EMARK [1]
+    rw [show w.set EMARK [1] = w1 from rfl] at e1
     have hw1frame : ∀ r : Var, r ≠ EMARK → State.get w1 r = State.get w r :=
       fun r hr => State.get_set_ne _ _ _ _ hr
     have hw1E : State.get w1 EMARK = [1] := State.get_set_eq _ _ _
@@ -520,7 +521,8 @@ theorem SBInv_step (BASE start : Nat) (bits : List Bool) (rest : List Nat)
     have e2 : (Cmd.op (.tail SCAN SCAN)).eval w1
         = w1.set SCAN (List.replicate (cond b 1 0) 1 ++ 0 :: T) := by
       rw [Cmd.eval_op]; simp only [Op.eval, hw1SCAN, List.tail_cons]
-    set w2 := w1.set SCAN (List.replicate (cond b 1 0) 1 ++ 0 :: T) with hw2
+    let w2 := w1.set SCAN (List.replicate (cond b 1 0) 1 ++ 0 :: T)
+    rw [show w1.set SCAN (List.replicate (cond b 1 0) 1 ++ 0 :: T) = w2 from rfl] at e2
     have hw2frame : ∀ r : Var, r ≠ SCAN → State.get w2 r = State.get w1 r :=
       fun r hr => State.get_set_ne _ _ _ _ hr
     have hw2SCAN : State.get w2 SCAN = List.replicate (cond b 1 0) 1 ++ 0 :: T :=
@@ -531,7 +533,8 @@ theorem SBInv_step (BASE start : Nat) (bits : List Bool) (rest : List Nat)
       rw [Cmd.eval_op]
       simp only [Op.eval, hw2SCAN]
       cases b <;> rfl
-    set w3 := w2.set TFLG [cond b 1 0] with hw3
+    let w3 := w2.set TFLG [cond b 1 0]
+    rw [show w2.set TFLG [cond b 1 0] = w3 from rfl] at e3
     have hw3frame : ∀ r : Var, r ≠ TFLG → State.get w3 r = State.get w2 r :=
       fun r hr => State.get_set_ne _ _ _ _ hr
     have hw3T : State.get w3 TFLG = [cond b 1 0] := State.get_set_eq _ _ _
@@ -552,13 +555,15 @@ theorem SBInv_step (BASE start : Nat) (bits : List Bool) (rest : List Nat)
       simp only [Op.eval, hw3BASE, hw3K]
       congr 1
       rw [List.replicate_add]
-    set w4 := w3.set WREG (List.replicate (start + i) 1) with hw4
+    let w4 := w3.set WREG (List.replicate (start + i) 1)
+    rw [show w3.set WREG (List.replicate (start + i) 1) = w4 from rfl] at e4
     have hw4frame : ∀ r : Var, r ≠ WREG → State.get w4 r = State.get w3 r :=
       fun r hr => State.get_set_ne _ _ _ _ hr
     have hw4W : State.get w4 WREG = List.replicate (start + i) 1 := State.get_set_eq _ _ _
     clear_value w4
     -- step 5: emitFandTag
-    set w5 := emitFandTag.eval w4 with hw5
+    let w5 := emitFandTag.eval w4
+    have hw5 : w5 = emitFandTag.eval w4 := rfl
     have hw5frame : ∀ r : Var, r ≠ OUT → State.get w5 r = State.get w4 r := by
       intro r hr; rw [hw5]; exact emitFandTag_frame w4 r hr
     have e5OUT : State.get w5 OUT = State.get w4 OUT ++ [0, 1] := by
@@ -571,7 +576,8 @@ theorem SBInv_step (BASE start : Nat) (bits : List Bool) (rest : List Nat)
       rw [hw5T]; cases b <;> rfl
     have hw5W : State.get w5 WREG = List.replicate (start + i) 1 := by
       rw [hw5frame WREG (by decide)]; exact hw4W
-    set w6 := emitLitAt.eval w5 with hw6
+    let w6 := emitLitAt.eval w5
+    have hw6 : w6 = emitLitAt.eval w5 := rfl
     have hw6frame : ∀ r : Var, r ≠ OUT → State.get w6 r = State.get w5 r := by
       intro r hr; rw [hw6]; exact emitLitAt_frame w5 r hr
     have e6OUT : State.get w6 OUT = State.get w5 OUT ++ serF (litFor b (start + i)) := by
@@ -599,7 +605,8 @@ theorem SBInv_step (BASE start : Nat) (bits : List Bool) (rest : List Nat)
           have hS0 : State.get w6 SCAN = 0 :: T := hw6SCAN
           rw [Cmd.eval_ifBit_false _ _ _ _ hT0, Cmd.eval_op]
           simp only [Op.eval, hS0, List.tail_cons]
-    set wF := w6.set SCAN T with hwF
+    let wF := w6.set SCAN T
+    rw [show w6.set SCAN T = wF from rfl] at eF
     have hwFframe : ∀ r : Var, r ≠ SCAN → State.get wF r = State.get w6 r :=
       fun r hr => State.get_set_ne _ _ _ _ hr
     have hwFSCAN : State.get wF SCAN = T := State.get_set_eq _ _ _
@@ -633,7 +640,8 @@ theorem SBInv_step (BASE start : Nat) (bits : List Bool) (rest : List Nat)
     subst hi
     obtain ⟨hDONE, hSCAN, hOUT⟩ := hph1 (le_refl _)
     rw [List.take_of_length_le (le_refl bits.length)] at hOUT
-    set w := st.set KBIT (List.replicate bits.length 1) with hw
+    let w := st.set KBIT (List.replicate bits.length 1)
+    rw [show st.set KBIT (List.replicate bits.length 1) = w from rfl]
     have hwframe : ∀ r : Var, r ≠ KBIT → State.get w r = State.get st r :=
       fun r hr => State.get_set_ne _ _ _ _ hr
     have hwD : State.get w DONE = [] := by
@@ -649,7 +657,8 @@ theorem SBInv_step (BASE start : Nat) (bits : List Bool) (rest : List Nat)
     have hDONEne : State.get w DONE ≠ [1] := by rw [hwD]; decide
     have e1 : (Cmd.op (.head EMARK SCAN)).eval w = w.set EMARK [0] := by
       rw [Cmd.eval_op]; simp only [Op.eval, hSCANw]
-    set w1 := w.set EMARK [0] with hw1
+    let w1 := w.set EMARK [0]
+    rw [show w.set EMARK [0] = w1 from rfl] at e1
     have hw1frame : ∀ r : Var, r ≠ EMARK → State.get w1 r = State.get w r :=
       fun r hr => State.get_set_ne _ _ _ _ hr
     have hw1E : State.get w1 EMARK = [0] := State.get_set_eq _ _ _
@@ -659,14 +668,16 @@ theorem SBInv_step (BASE start : Nat) (bits : List Bool) (rest : List Nat)
     have hw1Ene : State.get w1 EMARK ≠ [1] := by rw [hw1E]; decide
     have e2 : (Cmd.op (.tail SCAN SCAN)).eval w1 = w1.set SCAN rest := by
       rw [Cmd.eval_op]; simp only [Op.eval, hw1SCAN, List.tail_cons]
-    set w2 := w1.set SCAN rest with hw2
+    let w2 := w1.set SCAN rest
+    rw [show w1.set SCAN rest = w2 from rfl] at e2
     have hw2frame : ∀ r : Var, r ≠ SCAN → State.get w2 r = State.get w1 r :=
       fun r hr => State.get_set_ne _ _ _ _ hr
     have hw2SCAN : State.get w2 SCAN = rest := State.get_set_eq _ _ _
     clear_value w2
     have e3 : (Cmd.op (.clear DONE)).eval w2 = w2.set DONE [] := by
       rw [Cmd.eval_op]; simp only [Op.eval]
-    set w3 := w2.set DONE [] with hw3
+    let w3 := w2.set DONE []
+    rw [show w2.set DONE [] = w3 from rfl] at e3
     have hw3frame : ∀ r : Var, r ≠ DONE → State.get w3 r = State.get w2 r :=
       fun r hr => State.get_set_ne _ _ _ _ hr
     have hw3D : State.get w3 DONE = [] := State.get_set_eq _ _ _
@@ -675,7 +686,9 @@ theorem SBInv_step (BASE start : Nat) (bits : List Bool) (rest : List Nat)
       rw [Cmd.eval_op]
       simp only [Op.eval, hw3D]
       rfl
-    set wF := w3.set DONE [1] with hwF
+    let wF := w3.set DONE [1]
+    have hwF : wF = w3.set DONE [1] := rfl
+    rw [← hwF] at e4
     have hwFframe : ∀ r : Var, r ≠ DONE → State.get wF r = State.get w3 r :=
       fun r hr => State.get_set_ne _ _ _ _ hr
     have heval : (sentBitBody BASE).eval w = wF := by
@@ -697,7 +710,8 @@ theorem SBInv_step (BASE start : Nat) (bits : List Bool) (rest : List Nat)
         hwframe r h5, hframe r h1 h2 h3 h4 h5 h6 h7 h8]
   · -- idle iteration: DONE set, only ZERO is (re-)cleared
     obtain ⟨hDONE, hSCAN, hOUT⟩ := hph2 hi
-    set w := st.set KBIT (List.replicate i 1) with hw
+    let w := st.set KBIT (List.replicate i 1)
+    rw [show st.set KBIT (List.replicate i 1) = w from rfl]
     have hwframe : ∀ r : Var, r ≠ KBIT → State.get w r = State.get st r :=
       fun r hr => State.get_set_ne _ _ _ _ hr
     have hwD : State.get w DONE = [1] := by
@@ -778,9 +792,8 @@ theorem emitBitsFromSent_run (BASE start : Nat) (bits : List Bool) (rest : List 
   have heval : (emitBitsFromSent BASE).eval u
       = emitFtrue.eval (Cmd.foldlState (sentBitBody BASE) KBIT
           (List.range (State.get u1 SCAN).length) u1) := by
-    show emitFtrue.eval ((Cmd.forBnd KBIT SCAN (sentBitBody BASE)).eval
-      ((Cmd.op (.clear DONE)).eval u)) = _
-    rw [e0, Cmd.eval_forBnd]
+    unfold emitBitsFromSent
+    rw [Cmd.eval_seq, Cmd.eval_seq, e0, Cmd.eval_forBnd]
   refine ⟨?_, ?_, ?_, ?_⟩
   · rw [heval, emitFtrue_frame _ SCAN (by decide)]; exact hSCf
   · rw [heval, emitFtrue_run, State.get_set_eq, hOUTf, List.append_assoc,
@@ -3910,6 +3923,31 @@ theorem wf_iff (C : BinaryCC) :
   · rintro ⟨hw, ho, ⟨k, _, hkw⟩, hle, hc, ⟨m, hm⟩⟩
     exact ⟨hw, ho, hle, ⟨k, by rw [hkw]; ring⟩, ⟨m, by rw [hm]; ring⟩, hc⟩
 
+/-- The nested `computeWF` guards collapse to one conjunction. -/
+private theorem nested_guard_collapse (p1 p2 p3 p4 p5 : Prop) [Decidable p1] [Decidable p2]
+    [Decidable p3] [Decidable p4] [Decidable p5] (b : Bool) :
+    (bif b then (if p5 then (if p4 then (if p3 then (if p2 then (if p1 then ([1] : List Nat)
+      else []) else []) else []) else []) else []) else [])
+      = if (p1 ∧ p2 ∧ p3 ∧ p4 ∧ p5 ∧ b = true) then [1] else [] := by
+  cases b
+  · exact Eq.symm (if_neg fun h => nomatch h.2.2.2.2.2)
+  · rw [cond_true]
+    by_cases h5 : p5
+    · rw [if_pos h5]
+      by_cases h4 : p4
+      · rw [if_pos h4]
+        by_cases h3 : p3
+        · rw [if_pos h3]
+          by_cases h2 : p2
+          · rw [if_pos h2]
+            by_cases h1 : p1
+            · rw [if_pos h1]; exact Eq.symm (if_pos ⟨h1, h2, h3, h4, h5, rfl⟩)
+            · rw [if_neg h1]; exact Eq.symm (if_neg fun h => h1 h.1)
+          · rw [if_neg h2]; exact Eq.symm (if_neg fun h => h2 h.2.1)
+        · rw [if_neg h3]; exact Eq.symm (if_neg fun h => h3 h.2.2.1)
+      · rw [if_neg h4]; exact Eq.symm (if_neg fun h => h4 h.2.2.2.1)
+    · rw [if_neg h5]; exact Eq.symm (if_neg fun h => h5 h.2.2.2.2.1)
+
 /-- **`computeWF` reproduces the wellformedness predicate on-machine.** -/
 theorem computeWF_run (C : BinaryCC) (u : State)
     [Decidable (BinaryCC_wellformed C)]
@@ -3927,69 +3965,63 @@ theorem computeWF_run (C : BinaryCC) (u : State)
   unfold computeWF
   -- t0 : clear GWF
   rw [Cmd.eval_seq]
-  set t0 := (Cmd.op (.clear GWF)).eval u with ht0
+  generalize ht0 : (Cmd.op (.clear GWF)).eval u = t0
   have ht0f : ∀ r : Var, r ≠ GWF → State.get t0 r = State.get u r :=
-    fun r hr => by rw [ht0, Cmd.eval_op]; simp only [Op.eval]; exact State.get_set_ne _ _ _ _ hr
+    fun r hr => by rw [← ht0, Cmd.eval_op]; simp only [Op.eval]; exact State.get_set_ne _ _ _ _ hr
   have ht0Gnil : State.get t0 GWF = [] := by
-    rw [ht0, Cmd.eval_op]; simp only [Op.eval]; exact State.get_set_eq _ _ _
-  clear_value t0
+    rw [← ht0, Cmd.eval_op]; simp only [Op.eval]; exact State.get_set_eq _ _ _
   -- t1 : appendOne GWF
   rw [Cmd.eval_seq]
-  set t1 := (Cmd.op (.appendOne GWF)).eval t0 with ht1
+  generalize ht1 : (Cmd.op (.appendOne GWF)).eval t0 = t1
   have ht1G : State.get t1 GWF = [1] := by
-    rw [ht1, Cmd.eval_op]; simp only [Op.eval, ht0Gnil, List.nil_append, State.get_set_eq]
+    rw [← ht1, Cmd.eval_op]; simp only [Op.eval, ht0Gnil, List.nil_append, State.get_set_eq]
   have ht1f : ∀ r : Var, r ≠ GWF → State.get t1 r = State.get u r := by
-    intro r hr; rw [ht1, Cmd.eval_op]; simp only [Op.eval, State.get_set_ne _ _ _ _ hr]
+    intro r hr; rw [← ht1, Cmd.eval_op]; simp only [Op.eval, State.get_set_ne _ _ _ _ hr]
     exact ht0f r hr
   have ht1W := (ht1f WIDTH (by decide)).trans hW
   have ht1O := (ht1f OFFSET (by decide)).trans hO
   have ht1L := (ht1f LREG (by decide)).trans hL
   have ht1C := (ht1f CARDS (by decide)).trans hCARDS
   have ht1Z := (ht1f ZERO (by decide)).trans hZ
-  clear_value t1
   -- P1 : nonEmpty TFLG WIDTH ;; andFlag TFLG   (0 < width)
   rw [Cmd.eval_seq]
   obtain ⟨hne1, hnf1⟩ := nonEmptyTFLG_run WIDTH C.width t1 ht1W
-  set t2 := (Cmd.op (.nonEmpty TFLG WIDTH)).eval t1 with ht2
+  generalize (Cmd.op (.nonEmpty TFLG WIDTH)).eval t1 = t2 at hne1 hnf1 ⊢
   have ht2G := (hnf1 GWF (by decide)).trans ht1G
   have ht2W := (hnf1 WIDTH (by decide)).trans ht1W
   have ht2O := (hnf1 OFFSET (by decide)).trans ht1O
   have ht2L := (hnf1 LREG (by decide)).trans ht1L
   have ht2C := (hnf1 CARDS (by decide)).trans ht1C
   have ht2Z := (hnf1 ZERO (by decide)).trans ht1Z
-  clear_value t2
   rw [Cmd.eval_seq]
   obtain ⟨haf1G, haf1Z, haf1F⟩ := andFlag_run (0 < C.width) [1] t2 hne1 ht2G ht2Z
-  set t3 := (andFlag TFLG).eval t2 with ht3
+  generalize (andFlag TFLG).eval t2 = t3 at haf1G haf1Z haf1F ⊢
   have ht3W := (haf1F WIDTH (by decide) (by decide)).trans ht2W
   have ht3O := (haf1F OFFSET (by decide) (by decide)).trans ht2O
   have ht3L := (haf1F LREG (by decide) (by decide)).trans ht2L
   have ht3C := (haf1F CARDS (by decide) (by decide)).trans ht2C
-  clear_value t3
   -- P2 : nonEmpty TFLG OFFSET ;; andFlag TFLG   (0 < offset)
   rw [Cmd.eval_seq]
   obtain ⟨hne2, hnf2⟩ := nonEmptyTFLG_run OFFSET C.offset t3 ht3O
-  set t4 := (Cmd.op (.nonEmpty TFLG OFFSET)).eval t3 with ht4
+  generalize (Cmd.op (.nonEmpty TFLG OFFSET)).eval t3 = t4 at hne2 hnf2 ⊢
   have ht4G := (hnf2 GWF (by decide)).trans haf1G
   have ht4W := (hnf2 WIDTH (by decide)).trans ht3W
   have ht4O := (hnf2 OFFSET (by decide)).trans ht3O
   have ht4L := (hnf2 LREG (by decide)).trans ht3L
   have ht4C := (hnf2 CARDS (by decide)).trans ht3C
   have ht4Z := (hnf2 ZERO (by decide)).trans haf1Z
-  clear_value t4
   rw [Cmd.eval_seq]
   obtain ⟨haf2G, haf2Z, haf2F⟩ := andFlag_run (0 < C.offset) _ t4 hne2 ht4G ht4Z
-  set t5 := (andFlag TFLG).eval t4 with ht5
+  generalize (andFlag TFLG).eval t4 = t5 at haf2G haf2Z haf2F ⊢
   have ht5W := (haf2F WIDTH (by decide) (by decide)).trans ht4W
   have ht5O := (haf2F OFFSET (by decide) (by decide)).trans ht4O
   have ht5L := (haf2F LREG (by decide) (by decide)).trans ht4L
   have ht5C := (haf2F CARDS (by decide) (by decide)).trans ht4C
-  clear_value t5
   -- P3 : leCheck WIDTH LREG ;; andFlag TFLG   (width ≤ L)
   rw [Cmd.eval_seq]
   obtain ⟨hle3T, hle3F⟩ := leCheck_run WIDTH LREG C.width C.init.length t5 (by decide)
     ht5W (by rw [ht5L]; simp)
-  set t6 := (leCheck WIDTH LREG).eval t5 with ht6
+  generalize (leCheck WIDTH LREG).eval t5 = t6 at hle3T hle3F ⊢
   have ht6Tiff : State.get t6 TFLG = [1] ↔ C.width ≤ C.init.length := by
     rw [hle3T]; by_cases h : C.width ≤ C.init.length <;> simp [h]
   have ht6G := (hle3F GWF (by decide) (by decide) (by decide)).trans haf2G
@@ -3998,21 +4030,19 @@ theorem computeWF_run (C : BinaryCC) (u : State)
   have ht6L := (hle3F LREG (by decide) (by decide) (by decide)).trans ht5L
   have ht6C := (hle3F CARDS (by decide) (by decide) (by decide)).trans ht5C
   have ht6Z := (hle3F ZERO (by decide) (by decide) (by decide)).trans haf2Z
-  clear_value t6
   rw [Cmd.eval_seq]
   obtain ⟨haf3G, haf3Z, haf3F⟩ := andFlag_run (C.width ≤ C.init.length) _ t6 ht6Tiff ht6G ht6Z
-  set t7 := (andFlag TFLG).eval t6 with ht7
+  generalize (andFlag TFLG).eval t6 = t7 at haf3G haf3Z haf3F ⊢
   have ht7W := (haf3F WIDTH (by decide) (by decide)).trans ht6W
   have ht7O := (haf3F OFFSET (by decide) (by decide)).trans ht6O
   have ht7L := (haf3F LREG (by decide) (by decide)).trans ht6L
   have ht7C := (haf3F CARDS (by decide) (by decide)).trans ht6C
-  clear_value t7
   -- P4 : dvdCheck WIDTH OFFSET ;; andFlag TFLG   (offset ∣ width)
   rw [Cmd.eval_seq]
   obtain ⟨hdv4T, hdv4Z, hdv4F⟩ := dvdCheck_run WIDTH OFFSET C.width C.offset t7
     (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
     ht7W ht7O haf3Z
-  set t8 := (dvdCheck WIDTH OFFSET).eval t7 with ht8
+  generalize (dvdCheck WIDTH OFFSET).eval t7 = t8 at hdv4T hdv4Z hdv4F ⊢
   have ht8Tiff : State.get t8 TFLG = [1] ↔ C.offset ∣ C.width := by
     rw [hdv4T]; by_cases h : C.offset ∣ C.width <;> simp [h]
   have ht8G := (hdv4F GWF (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)).trans haf3G
@@ -4020,33 +4050,29 @@ theorem computeWF_run (C : BinaryCC) (u : State)
   have ht8O := (hdv4F OFFSET (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)).trans ht7O
   have ht8L := (hdv4F LREG (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)).trans ht7L
   have ht8C := (hdv4F CARDS (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)).trans ht7C
-  clear_value t8
   rw [Cmd.eval_seq]
   obtain ⟨haf4G, haf4Z, haf4F⟩ := andFlag_run (C.offset ∣ C.width) _ t8 ht8Tiff ht8G hdv4Z
-  set t9 := (andFlag TFLG).eval t8 with ht9
+  generalize (andFlag TFLG).eval t8 = t9 at haf4G haf4Z haf4F ⊢
   have ht9W := (haf4F WIDTH (by decide) (by decide)).trans ht8W
   have ht9O := (haf4F OFFSET (by decide) (by decide)).trans ht8O
   have ht9L := (haf4F LREG (by decide) (by decide)).trans ht8L
   have ht9C := (haf4F CARDS (by decide) (by decide)).trans ht8C
-  clear_value t9
   -- P5 : dvdCheck LREG OFFSET ;; andFlag TFLG   (offset ∣ L)
   rw [Cmd.eval_seq]
   obtain ⟨hdv5T, hdv5Z, hdv5F⟩ := dvdCheck_run LREG OFFSET C.init.length C.offset t9
     (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
     ht9L ht9O haf4Z
-  set t10 := (dvdCheck LREG OFFSET).eval t9 with ht10
+  generalize (dvdCheck LREG OFFSET).eval t9 = t10 at hdv5T hdv5Z hdv5F ⊢
   have ht10Tiff : State.get t10 TFLG = [1] ↔ C.offset ∣ C.init.length := by
     rw [hdv5T]; by_cases h : C.offset ∣ C.init.length <;> simp [h]
   have ht10G := (hdv5F GWF (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)).trans haf4G
   have ht10W := (hdv5F WIDTH (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)).trans ht9W
   have ht10C := (hdv5F CARDS (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)).trans ht9C
-  clear_value t10
   rw [Cmd.eval_seq]
   obtain ⟨haf5G, haf5Z, haf5F⟩ := andFlag_run (C.offset ∣ C.init.length) _ t10 ht10Tiff ht10G hdv5Z
-  set t11 := (andFlag TFLG).eval t10 with ht11
+  generalize (andFlag TFLG).eval t10 = t11 at haf5G haf5Z haf5F ⊢
   have ht11W := (haf5F WIDTH (by decide) (by decide)).trans ht10W
   have ht11C := (haf5F CARDS (by decide) (by decide)).trans ht10C
-  clear_value t11
   -- P6 : cardLenCheck   (all cards ok)
   obtain ⟨hclG, hclF⟩ := cardLenCheck_run C C.width
     (if C.offset ∣ C.init.length then (if C.offset ∣ C.width then
@@ -4055,16 +4081,8 @@ theorem computeWF_run (C : BinaryCC) (u : State)
   refine ⟨?_, ?_⟩
   · rw [hclG]
     -- collapse the nested guards and match wellformedness
-    rw [show (bif cardsOKB C.cards C.width then
-        (if C.offset ∣ C.init.length then (if C.offset ∣ C.width then
-          (if C.width ≤ C.init.length then (if 0 < C.offset then (if 0 < C.width then ([1] : List Nat) else []) else []) else []) else []) else []) else [])
-        = (if (0 < C.width ∧ 0 < C.offset ∧ C.width ≤ C.init.length ∧ C.offset ∣ C.width
-            ∧ C.offset ∣ C.init.length ∧ cardsOKB C.cards C.width = true) then [1] else [])
-        from by
-          by_cases h1 : 0 < C.width <;> by_cases h2 : 0 < C.offset <;>
-          by_cases h3 : C.width ≤ C.init.length <;> by_cases h4 : C.offset ∣ C.width <;>
-          by_cases h5 : C.offset ∣ C.init.length <;> cases hb : cardsOKB C.cards C.width <;>
-          simp [h1, h2, h3, h4, h5]]
+    rw [nested_guard_collapse (0 < C.width) (0 < C.offset) (C.width ≤ C.init.length)
+      (C.offset ∣ C.width) (C.offset ∣ C.init.length) (cardsOKB C.cards C.width)]
     exact if_congr (wf_iff C) rfl rfl
   · -- the frame: walk the 13-component chain back to `u`
     intro r hG hT hZr hMR hMC hMG hK1 hK2 hSW hCL hDN hEM hKB hKC
@@ -4190,6 +4208,24 @@ private abbrev s4C (C : BinaryCC) : State := (s3C C).set INIT (FlatCCBinFree.bit
 private abbrev s5C (C : BinaryCC) : State :=
   (s4C C).set CARDS (FlatTCCFree.encCardsOut (C.cards.map FlatCCBinFree.cardNat))
 
+/-- `State.set` on an in-range register is `List.set`. -/
+private theorem stateSet_eq_listSet (s : State) (v : Var) (x : List Nat) (h : v < s.length) :
+    s.set v x = List.set s v x := by
+  unfold State.set; rw [if_pos h]
+
+/-- `encodeIn`'s `List.set` chain is the `State.set` chain `s5C` plus the `FINAL` write
+(each register is in range, so every `State.set` is a plain `List.set`). -/
+private theorem encodeIn_eq_s5C (C : BinaryCC) :
+    encodeIn C
+      = (s5C C).set FINAL (FlatTCCFree.encFinal (C.final.map FlatCCBinFree.bitsNat)) := by
+  unfold encodeIn s5C s4C s3C s2C s1C s0C
+  rw [stateSet_eq_listSet _ STEPS _ (by simp only [List.length_replicate]; decide),
+    stateSet_eq_listSet _ OFFSET _ (by simp only [List.length_set, List.length_replicate]; decide),
+    stateSet_eq_listSet _ WIDTH _ (by simp only [List.length_set, List.length_replicate]; decide),
+    stateSet_eq_listSet _ INIT _ (by simp only [List.length_set, List.length_replicate]; decide),
+    stateSet_eq_listSet _ CARDS _ (by simp only [List.length_set, List.length_replicate]; decide),
+    stateSet_eq_listSet _ FINAL _ (by simp only [List.length_set, List.length_replicate]; decide)]
+
 /-- **`encodeIn`'s size is linear** in the instance size (no doubling). -/
 theorem encodeIn_size_le (C : BinaryCC) :
     State.size (encodeIn C) ≤ 2 * encodable.size C + 1 := by
@@ -4245,9 +4281,7 @@ theorem encodeIn_size_le (C : BinaryCC) :
       + (FlatCCBinFree.bitsNat C.init).length
       + (FlatTCCFree.encCardsOut (C.cards.map FlatCCBinFree.cardNat)).length
       + (FlatTCCFree.encFinal (C.final.map FlatCCBinFree.bitsNat)).length := by
-    show State.size ((s5C C).set FINAL
-        (FlatTCCFree.encFinal (C.final.map FlatCCBinFree.bitsNat))) = _
-    rw [fresh_set_size (s5C C) FINAL
+    rw [encodeIn_eq_s5C, fresh_set_size (s5C C) FINAL
       (FlatTCCFree.encFinal (C.final.map FlatCCBinFree.bitsNat)) hget5, e5]
   have hinit_len : (FlatCCBinFree.bitsNat C.init).length ≤ encodable.size C.init := by
     rw [show (FlatCCBinFree.bitsNat C.init).length = C.init.length from
@@ -4372,19 +4406,41 @@ theorem buildFSAT_run (C : BinaryCC) :
     State.get (buildFSAT.eval (encodeIn C)) FOUT
       = serF (BinaryCC_to_FSAT_instance C) := by
   classical
-  -- the pinned input frame (`encodeIn C`), field by field (all definitional)
-  have h0STEPS : State.get (encodeIn C) STEPS = List.replicate C.steps 1 := rfl
-  have h0OFF : State.get (encodeIn C) OFFSET = List.replicate C.offset 1 := rfl
-  have h0WID : State.get (encodeIn C) WIDTH = List.replicate C.width 1 := rfl
-  have h0INIT : State.get (encodeIn C) INIT = FlatCCBinFree.bitsNat C.init := rfl
+  -- the pinned input frame (`encodeIn C`), field by field (rewriting the `.set` chain)
+  have h0STEPS : State.get (encodeIn C) STEPS = List.replicate C.steps 1 := by
+    rw [encodeIn_eq_s5C]; unfold s5C s4C s3C s2C s1C
+    rw [State.get_set_ne _ _ _ _ (by decide), State.get_set_ne _ _ _ _ (by decide),
+      State.get_set_ne _ _ _ _ (by decide), State.get_set_ne _ _ _ _ (by decide),
+      State.get_set_ne _ _ _ _ (by decide), State.get_set_eq]
+  have h0OFF : State.get (encodeIn C) OFFSET = List.replicate C.offset 1 := by
+    rw [encodeIn_eq_s5C]; unfold s5C s4C s3C s2C
+    rw [State.get_set_ne _ _ _ _ (by decide), State.get_set_ne _ _ _ _ (by decide),
+      State.get_set_ne _ _ _ _ (by decide), State.get_set_ne _ _ _ _ (by decide),
+      State.get_set_eq]
+  have h0WID : State.get (encodeIn C) WIDTH = List.replicate C.width 1 := by
+    rw [encodeIn_eq_s5C]; unfold s5C s4C s3C
+    rw [State.get_set_ne _ _ _ _ (by decide), State.get_set_ne _ _ _ _ (by decide),
+      State.get_set_ne _ _ _ _ (by decide), State.get_set_eq]
+  have h0INIT : State.get (encodeIn C) INIT = FlatCCBinFree.bitsNat C.init := by
+    rw [encodeIn_eq_s5C]; unfold s5C s4C
+    rw [State.get_set_ne _ _ _ _ (by decide), State.get_set_ne _ _ _ _ (by decide),
+      State.get_set_eq]
   have h0CARDS : State.get (encodeIn C) CARDS
-      = FlatTCCFree.encCardsOut (C.cards.map FlatCCBinFree.cardNat) := rfl
+      = FlatTCCFree.encCardsOut (C.cards.map FlatCCBinFree.cardNat) := by
+    rw [encodeIn_eq_s5C]; unfold s5C
+    rw [State.get_set_ne _ _ _ _ (by decide), State.get_set_eq]
   have h0FINAL : State.get (encodeIn C) FINAL
-      = FlatTCCFree.encFinal (C.final.map FlatCCBinFree.bitsNat) := rfl
-  have h0ZERO : State.get (encodeIn C) ZERO = [] := rfl
+      = FlatTCCFree.encFinal (C.final.map FlatCCBinFree.bitsNat) := by
+    rw [encodeIn_eq_s5C, State.get_set_eq]
+  have h0ZERO : State.get (encodeIn C) ZERO = [] := by
+    rw [encodeIn_eq_s5C]; unfold s5C s4C s3C s2C s1C
+    rw [State.get_set_ne _ _ _ _ (by decide), State.get_set_ne _ _ _ _ (by decide),
+      State.get_set_ne _ _ _ _ (by decide), State.get_set_ne _ _ _ _ (by decide),
+      State.get_set_ne _ _ _ _ (by decide), State.get_set_ne _ _ _ _ (by decide)]
+    exact regFrame_replicate_get ZERO (by decide)
   -- u1 : precompLen (LREG := 1^L, LREG1 := 1^(L+1))
   obtain ⟨hpL, hpL1, hpF⟩ := precompLen_run C.init (encodeIn C) h0INIT
-  set u1 := precompLen.eval (encodeIn C) with hu1
+  generalize hu1 : precompLen.eval (encodeIn C) = u1 at hpL hpL1 hpF
   have h1STEPS := (hpF STEPS (by decide) (by decide) (by decide)).trans h0STEPS
   have h1OFF := (hpF OFFSET (by decide) (by decide) (by decide)).trans h0OFF
   have h1WID := (hpF WIDTH (by decide) (by decide) (by decide)).trans h0WID
@@ -4392,10 +4448,9 @@ theorem buildFSAT_run (C : BinaryCC) :
   have h1CARDS := (hpF CARDS (by decide) (by decide) (by decide)).trans h0CARDS
   have h1FINAL := (hpF FINAL (by decide) (by decide) (by decide)).trans h0FINAL
   have h1ZERO := (hpF ZERO (by decide) (by decide) (by decide)).trans h0ZERO
-  clear_value u1
   -- u2 : computeWF (GWF := the wellformedness flag)
   obtain ⟨hwG, hwF⟩ := computeWF_run C u1 h1WID h1OFF hpL h1CARDS h1ZERO
-  set u2 := computeWF.eval u1 with hu2
+  generalize hu2 : computeWF.eval u1 = u2 at hwG hwF
   have h2STEPS := (hwF STEPS (by decide) (by decide) (by decide) (by decide) (by decide)
     (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
     (by decide) (by decide)).trans h1STEPS
@@ -4420,11 +4475,11 @@ theorem buildFSAT_run (C : BinaryCC) :
   have h2LREG1 := (hwF LREG1 (by decide) (by decide) (by decide) (by decide) (by decide)
     (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
     (by decide) (by decide)).trans hpL1
-  clear_value u2
   -- u3 : clear OUT
   have e3 : (Cmd.op (.clear OUT)).eval u2 = u2.set OUT [] := by
     rw [Cmd.eval_op]; simp only [Op.eval]
-  set u3 := u2.set OUT [] with hu3
+  let u3 := u2.set OUT []
+  rw [show u2.set OUT [] = u3 from rfl] at e3
   have h3f : ∀ r : Var, r ≠ OUT → State.get u3 r = State.get u2 r :=
     fun r hr => State.get_set_ne _ _ _ _ hr
   have h3OUT : State.get u3 OUT = [] := State.get_set_eq _ _ _
@@ -4451,7 +4506,7 @@ theorem buildFSAT_run (C : BinaryCC) :
               emitFinal )
             emitFalse).eval u3) := by
     unfold buildFSAT
-    rw [Cmd.eval_seq, ← hu1, Cmd.eval_seq, ← hu2, Cmd.eval_seq, e3, Cmd.eval_seq]
+    rw [Cmd.eval_seq, hu1, Cmd.eval_seq, hu2, Cmd.eval_seq, e3, Cmd.eval_seq]
   rw [hevalPre, Cmd.eval_op]
   simp only [Op.eval]
   rw [State.get_set_eq]
@@ -4462,7 +4517,8 @@ theorem buildFSAT_run (C : BinaryCC) :
     -- v1 : emitFandTag (the outer `fand` tag)
     have e_v1 : emitFandTag.eval u3 = u3.set OUT [0, 1] := by
       rw [emitFandTag_run, h3OUT, List.nil_append]
-    set v1 := u3.set OUT [0, 1] with hv1
+    let v1 := u3.set OUT [0, 1]
+    rw [show u3.set OUT [0, 1] = v1 from rfl] at e_v1
     have hv1f : ∀ r : Var, r ≠ OUT → State.get v1 r = State.get u3 r :=
       fun r hr => State.get_set_ne _ _ _ _ hr
     have hv1OUT : State.get v1 OUT = [0, 1] := State.get_set_eq _ _ _
@@ -4470,7 +4526,8 @@ theorem buildFSAT_run (C : BinaryCC) :
     -- v2 : clear ZERO
     have e_v2 : (Cmd.op (.clear ZERO)).eval v1 = v1.set ZERO [] := by
       rw [Cmd.eval_op]; simp only [Op.eval]
-    set v2 := v1.set ZERO [] with hv2
+    let v2 := v1.set ZERO []
+    rw [show v1.set ZERO [] = v2 from rfl] at e_v2
     have hv2f : ∀ r : Var, r ≠ ZERO → State.get v2 r = State.get v1 r :=
       fun r hr => State.get_set_ne _ _ _ _ hr
     have hv2ZERO : State.get v2 ZERO = [] := State.get_set_eq _ _ _
@@ -4481,7 +4538,8 @@ theorem buildFSAT_run (C : BinaryCC) :
     have e_v3 : (Cmd.op (.copy SCAN INIT)).eval v2
         = v2.set SCAN (FlatCCBinFree.bitsNat C.init) := by
       rw [Cmd.eval_op]; simp only [Op.eval, h2INITv]
-    set v3 := v2.set SCAN (FlatCCBinFree.bitsNat C.init) with hv3
+    let v3 := v2.set SCAN (FlatCCBinFree.bitsNat C.init)
+    rw [show v2.set SCAN (FlatCCBinFree.bitsNat C.init) = v3 from rfl] at e_v3
     have hv3f : ∀ r : Var, r ≠ SCAN → State.get v3 r = State.get v2 r :=
       fun r hr => State.get_set_ne _ _ _ _ hr
     have hv3SCAN : State.get v3 SCAN = FlatCCBinFree.bitsNat C.init :=
@@ -4496,15 +4554,16 @@ theorem buildFSAT_run (C : BinaryCC) :
     obtain ⟨h4SCAN, h4OUT, h4F⟩ := emitBitsFromScan_run ZERO INIT 0 C.init v3
       (by decide) (by decide) (by decide) (by decide) (by decide)
       h3ZEROv h3INITlen hv3SCAN
-    set v4 := (emitBitsFromScan ZERO INIT).eval v3 with hv4
+    generalize hv4 : (emitBitsFromScan ZERO INIT).eval v3 = v4 at h4SCAN h4OUT h4F
     have h4OUTval : State.get v4 OUT = [0, 1] ++ serF (encodeBitsAt 0 C.init) := by
       rw [h4OUT, hv3f OUT (by decide), hv2f OUT (by decide), hv1OUT]
-    clear_value v4
     -- v5 : emitFandTag (the inner `fand` tag)
     have e_v5 : emitFandTag.eval v4
         = v4.set OUT (([0, 1] ++ serF (encodeBitsAt 0 C.init)) ++ [0, 1]) := by
       rw [emitFandTag_run, h4OUTval]
-    set v5 := v4.set OUT (([0, 1] ++ serF (encodeBitsAt 0 C.init)) ++ [0, 1]) with hv5
+    let v5 := v4.set OUT (([0, 1] ++ serF (encodeBitsAt 0 C.init)) ++ [0, 1])
+    rw [show v4.set OUT (([0, 1] ++ serF (encodeBitsAt 0 C.init)) ++ [0, 1]) = v5 from rfl]
+      at e_v5
     have hv5f : ∀ r : Var, r ≠ OUT → State.get v5 r = State.get v4 r :=
       fun r hr => State.get_set_ne _ _ _ _ hr
     have hv5OUT : State.get v5 OUT
@@ -4536,11 +4595,14 @@ theorem buildFSAT_run (C : BinaryCC) :
     -- v6 : emitAllSteps (the step-constraint block)
     obtain ⟨h6OUT, h6ZERO, h6F⟩ := emitAllSteps_run C v5
       h5STEPS h5OFF h5WID h5LREG h5LREG1 h5CARDS h5ZERO
-    set v6 := emitAllSteps.eval v5 with hv6
-    have h6STEPS := (h6F STEPS (by decide) (by decide) (by decide) (by decide) (by decide)
-      (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
-      (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
-      (by decide)).trans h5STEPS
+    generalize hv6 : emitAllSteps.eval v5 = v6 at h6OUT h6ZERO h6F
+    have h6STEPS := (h6F STEPS (of_decide_eq_true rfl) (of_decide_eq_true rfl)
+      (of_decide_eq_true rfl) (of_decide_eq_true rfl) (of_decide_eq_true rfl)
+      (of_decide_eq_true rfl) (of_decide_eq_true rfl) (of_decide_eq_true rfl)
+      (of_decide_eq_true rfl) (of_decide_eq_true rfl) (of_decide_eq_true rfl)
+      (of_decide_eq_true rfl) (of_decide_eq_true rfl) (of_decide_eq_true rfl)
+      (of_decide_eq_true rfl) (of_decide_eq_true rfl) (of_decide_eq_true rfl)
+      (of_decide_eq_true rfl) (of_decide_eq_true rfl) (of_decide_eq_true rfl)).trans h5STEPS
     have h6OFF := (h6F OFFSET (by decide) (by decide) (by decide) (by decide) (by decide)
       (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
       (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
@@ -4553,11 +4615,14 @@ theorem buildFSAT_run (C : BinaryCC) :
       (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
       (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
       (by decide)).trans h5LREG1
-    have h6FINAL := (h6F FINAL (by decide) (by decide) (by decide) (by decide) (by decide)
-      (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
-      (by decide) (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
-      (by decide)).trans h5FINAL
-    clear_value v6
+    have h6FINAL := (h6F FINAL (Nat.ne_of_beq_eq_false rfl) (Nat.ne_of_beq_eq_false rfl)
+      (Nat.ne_of_beq_eq_false rfl) (Nat.ne_of_beq_eq_false rfl) (Nat.ne_of_beq_eq_false rfl)
+      (Nat.ne_of_beq_eq_false rfl) (Nat.ne_of_beq_eq_false rfl) (Nat.ne_of_beq_eq_false rfl)
+      (Nat.ne_of_beq_eq_false rfl) (Nat.ne_of_beq_eq_false rfl) (Nat.ne_of_beq_eq_false rfl)
+      (Nat.ne_of_beq_eq_false rfl) (Nat.ne_of_beq_eq_false rfl) (Nat.ne_of_beq_eq_false rfl)
+      (Nat.ne_of_beq_eq_false rfl) (Nat.ne_of_beq_eq_false rfl) (Nat.ne_of_beq_eq_false rfl)
+      (Nat.ne_of_beq_eq_false rfl) (Nat.ne_of_beq_eq_false rfl)
+      (Nat.ne_of_beq_eq_false rfl)).trans h5FINAL
     -- v7 : emitFinal (the final-constraint block)
     obtain ⟨h7OUT, h7ZERO, h7F⟩ := emitFinal_run C v6
       h6STEPS h6OFF h6LREG h6LREG1 h6FINAL h6ZERO
@@ -4569,7 +4634,7 @@ theorem buildFSAT_run (C : BinaryCC) :
         emitAllSteps ;;
         emitFinal).eval u3 = emitFinal.eval v6 from by
       rw [Cmd.eval_seq, e_v1, Cmd.eval_seq, e_v2, Cmd.eval_seq, e_v3, Cmd.eval_seq,
-        ← hv4, Cmd.eval_seq, e_v5, Cmd.eval_seq, ← hv6]]
+        hv4, Cmd.eval_seq, e_v5, Cmd.eval_seq, hv6]]
     rw [h7OUT, h6OUT, hv5OUT]
     unfold BinaryCC_to_FSAT_instance
     rw [dif_pos hWf]

@@ -786,6 +786,9 @@ private theorem cardEmitBody_effect (sA sB : Nat) (C : BinaryCC) (u1 : State) (�
         State.get_set_ne _ _ _ _ (show WREG ≠ TFLG by decide)]
       exact hwW
 
+private theorem le_add_three_mul (x y z : Nat) : y + z + 1 ≤ x + 3 * y + 3 * z + 1 := by
+  omega
+
 /-- **`emitCardsAt` cost**: cubic in the ceiling `Ω`. -/
 theorem emitCardsAt_cost (sA sB : Nat) (C : BinaryCC) (u : State) (Ω : Nat)
     (hSA : State.get u STARTA = List.replicate sA 1)
@@ -856,9 +859,8 @@ theorem emitCardsAt_cost (sA sB : Nat) (C : BinaryCC) (u : State) (Ω : Nat)
   set B := 12 + 2 * ((K + 8) * P2) with hB
   have hBle : B ≤ (2 * K + 28) * P2 := by
     rw [hB]
-    have h12 : 12 ≤ 12 * P2 := by
-      have : 1 ≤ P2 := by rw [hP2]; nlinarith
-      omega
+    have h12 : 12 ≤ 12 * P2 :=
+      Nat.le_mul_of_pos_right 12 (Nat.mul_pos (Nat.succ_pos Ω) (Nat.succ_pos Ω))
     have hexp2 : 2 * ((K + 8) * P2) + 12 * P2 = (2 * K + 28) * P2 := by ring
     omega
   have hlB : len * B ≤ (Ω + 1) * ((2 * K + 28) * P2) :=
@@ -869,7 +871,8 @@ theorem emitCardsAt_cost (sA sB : Nat) (C : BinaryCC) (u : State) (Ω : Nat)
       = (2 * K + 28) * ((Ω + 1) * P2) + 16 * ((Ω + 1) * P2) := by ring
   have h5 : (Ω + 1) * P2 = Ω * Ω * Ω + 3 * (Ω * Ω) + 3 * Ω + 1 := by
     rw [hP2]; ring
-  have h6 : Ω * Ω * Ω + 3 * (Ω * Ω) + 3 * Ω + 1 ≥ Ω * Ω + Ω + 1 := by nlinarith
+  have h6 : Ω * Ω * Ω + 3 * (Ω * Ω) + 3 * Ω + 1 ≥ Ω * Ω + Ω + 1 :=
+    le_add_three_mul (Ω * Ω * Ω) (Ω * Ω) Ω
   have hcopy : (State.get u CARDS).length + 1 ≤ Ω + 1 := by omega
   omega
 
@@ -941,6 +944,63 @@ private theorem emitCardsAt_WREG (sA sB : Nat) (C : BinaryCC) (u : State) (Ω : 
         j st hM.1 hM.2).2)
   exact hInv.2
 
+private theorem stepBody_idx {lL L so step off wid cards Ω : Nat}
+    (h : lL + L + so + step + off + wid + L + cards ≤ Ω) :
+    lL + so + cards ≤ Ω ∧ lL + so + L + cards ≤ Ω :=
+  ⟨by omega, by omega⟩
+
+private theorem stepBody_close_pass (K Ω lL L step off wid cards cM cS cCA : Nat)
+    (hidx : lL + L + step * off + step + off + wid + L + cards ≤ Ω)
+    (hcMul : cM ≤ 1 + step * (2 * (0 + step * off + off) + 1) + step * step)
+    (hcSub : cS ≤ 1 + L * (step * off + wid + 1) + L * L)
+    (hcCA : cCA ≤ (2 * K + 44) * ((Ω + 1) * ((Ω + 1) * (Ω + 1)))) :
+    1 + 1 + (1 + cM
+      + (1 + (2 * (lL + step * off) + 1)
+      + (1 + (2 * (lL + step * off + L) + 1)
+      + (1 + (2 * (step * off + wid) + 1)
+      + (1 + (step * off + wid + 1)
+      + (1 + cS
+      + (1 + 1
+      + (1 + 4
+      + (1 + cCA)))))))))
+      ≤ (2 * K + 100) * ((Ω + 1) * ((Ω + 1) * (Ω + 1))) := by
+  have hMulle := le_trans hcMul
+    (mulLoopClose off step Ω (by omega) (by omega) (by omega))
+  have hSuble := le_trans hcSub
+    (subLoopClose (step * off + wid) L Ω (by omega) (by omega))
+  set P2 := (Ω + 1) * (Ω + 1) with hP2
+  set P3 := (Ω + 1) * P2 with hP3
+  have hP2exp : P2 = Ω * Ω + 2 * Ω + 1 := by rw [hP2]; ring
+  have hP23 : P2 ≤ P3 := le_scale Ω P2
+  have h44_100 : (2 * K + 44) * P3 + 56 * P3 = (2 * K + 100) * P3 := by ring
+  omega
+
+private theorem stepBody_close_fail (K Ω lL L step off wid cards cM cS : Nat)
+    (hidx : lL + L + step * off + step + off + wid + L + cards ≤ Ω)
+    (hcMul : cM ≤ 1 + step * (2 * (0 + step * off + off) + 1) + step * step)
+    (hcSub : cS ≤ 1 + L * (step * off + wid + 1) + L * L) :
+    1 + 1 + (1 + cM
+      + (1 + (2 * (lL + step * off) + 1)
+      + (1 + (2 * (lL + step * off + L) + 1)
+      + (1 + (2 * (step * off + wid) + 1)
+      + (1 + (step * off + wid + 1)
+      + (1 + cS
+      + (1 + 1
+      + (1 + 2
+      + (1 + 3)))))))))
+      ≤ (2 * K + 100) * ((Ω + 1) * ((Ω + 1) * (Ω + 1))) := by
+  have hMulle := le_trans hcMul
+    (mulLoopClose off step Ω (by omega) (by omega) (by omega))
+  have hSuble := le_trans hcSub
+    (subLoopClose (step * off + wid) L Ω (by omega) (by omega))
+  set P2 := (Ω + 1) * (Ω + 1) with hP2
+  set P3 := (Ω + 1) * P2 with hP3
+  have hP2exp : P2 = Ω * Ω + 2 * Ω + 1 := by rw [hP2]; ring
+  have hP23 : P2 ≤ P3 := le_scale Ω P2
+  have hKP3 : 0 ≤ (2 * K + 44) * P3 := Nat.zero_le _
+  have h44_100 : (2 * K + 44) * P3 + 56 * P3 = (2 * K + 100) * P3 := by ring
+  omega
+
 /-- **`stepBody` cost**: cubic in the ceiling `Ω`, plus the `WREG ≤ Ω` exit
 fact the enclosing loop needs. -/
 theorem stepBody_cost (C : BinaryCC) (line step : Nat) (u : State) (Ω : Nat)
@@ -964,8 +1024,9 @@ theorem stepBody_cost (C : BinaryCC) (line step : Nat) (u : State) (Ω : Nat)
   -- index arithmetic, upfront
   have hsucc : (line + 1) * C.init.length
       = line * C.init.length + C.init.length := by ring
-  have hlineL : line * C.init.length + step * C.offset ≤ Ω := by
-    rw [hsucc] at hΩidx; omega
+  have hidx : line * C.init.length + C.init.length + step * C.offset + step + C.offset
+      + C.width + C.init.length + (State.get u CARDS).length ≤ Ω := by
+    rw [← hsucc]; exact hΩidx
   -- w1: clear STEPO
   have e1 : (Cmd.op (.clear STEPO)).eval u = u.set STEPO [] := by
     rw [Cmd.eval_op]; simp only [Op.eval]
@@ -1170,10 +1231,7 @@ theorem stepBody_cost (C : BinaryCC) (line step : Nat) (u : State) (Ω : Nat)
         = encodeCardsAt C (line * C.init.length + step * C.offset)
             (line * C.init.length + step * C.offset + C.init.length) := by
       unfold encodeStepConstraint
-      rw [dif_pos hguard]
-      congr 1
-      rw [Nat.succ_mul]
-      omega
+      rw [dif_pos hguard, hsucc, Nat.add_right_comm (line * C.init.length) C.init.length]
     have hΩO9 : (State.get w9 OUT).length
         + (serF (encodeCardsAt C (line * C.init.length + step * C.offset)
             (line * C.init.length + step * C.offset + C.init.length))).length ≤ Ω := by
@@ -1183,13 +1241,11 @@ theorem stepBody_cost (C : BinaryCC) (line step : Nat) (u : State) (Ω : Nat)
     have hΩA9 : line * C.init.length + step * C.offset
         + (State.get w9 CARDS).length ≤ Ω := by
       rw [h9CARDSlen]
-      rw [hsucc] at hΩidx
-      omega
+      exact (stepBody_idx hidx).1
     have hΩB9 : line * C.init.length + step * C.offset + C.init.length
         + (State.get w9 CARDS).length ≤ Ω := by
       rw [h9CARDSlen]
-      rw [hsucc] at hΩidx
-      omega
+      exact (stepBody_idx hidx).2
     have hcCA := emitCardsAt_cost (line * C.init.length + step * C.offset)
       (line * C.init.length + step * C.offset + C.init.length) C w9 Ω
       h9SA h9SB h9CARDS h9Z hΩO9 hΩW9 hΩA9 hΩB9
@@ -1220,33 +1276,15 @@ theorem stepBody_cost (C : BinaryCC) (line step : Nat) (u : State) (Ω : Nat)
         Cmd.eval_seq, e9, Cmd.eval_ifBit_true _ _ _ _ hw9G]
     constructor
     · rw [hcost, hc3, hc4, hc5, hc6]
-      -- collapse everything against the ceiling
-      have hoff : C.offset ≤ Ω := by omega
-      have hsteple : step ≤ Ω := by omega
-      have hso : step * C.offset ≤ Ω := by omega
-      have hwid : C.width ≤ Ω := by omega
-      have hL : C.init.length ≤ Ω := by omega
-      have hsb : line * C.init.length + step * C.offset + C.init.length ≤ Ω := by
-        rw [hsucc] at hΩidx
-        omega
-      have hMulle := le_trans hcMul (mulLoopClose C.offset step Ω hoff hsteple hso)
-      have hSuble := le_trans hcSub
-        (subLoopClose (step * C.offset + C.width) C.init.length Ω (by omega) hL)
-      set K := Cmd.flatK (sentBitBody 0) with hK
-      set P2 := (Ω + 1) * (Ω + 1) with hP2
-      set P3 := (Ω + 1) * P2 with hP3
-      have hP2exp : P2 = Ω * Ω + 2 * Ω + 1 := by rw [hP2]; ring
-      have hP23 : P2 ≤ P3 := by
-        rw [hP3]
-        exact Nat.le_mul_of_pos_left P2 (by omega)
-      have hcCA' : emitCardsAt.cost w9 ≤ (2 * K + 44) * P3 := hcCA
-      have h44_100 : (2 * K + 44) * P3 + 56 * P3 = (2 * K + 100) * P3 := by ring
-      omega
+      exact stepBody_close_pass (Cmd.flatK (sentBitBody 0)) Ω (line * C.init.length)
+        C.init.length step C.offset C.width (State.get u CARDS).length _ _ _
+        hidx hcMul hcSub hcCA
     · rw [heval]
       exact hWCA
   · -- guard fails → emitFtrue
     obtain ⟨k, hk⟩ : ∃ k, step * C.offset + C.width - C.init.length = k + 1 :=
-      ⟨step * C.offset + C.width - C.init.length - 1, by omega⟩
+      ⟨_, (Nat.sub_add_cancel (show 1 ≤ step * C.offset + C.width - C.init.length from
+        Nat.sub_pos_of_lt (Nat.not_le.mp hguard))).symm⟩
     have hne : (State.get w7 REM).isEmpty = false := by
       rw [h7REM, hk]
       rfl
@@ -1299,27 +1337,9 @@ theorem stepBody_cost (C : BinaryCC) (line step : Nat) (u : State) (Ω : Nat)
         Cmd.eval_seq, e9, Cmd.eval_ifBit_false _ _ _ _ hw9Gne]
     constructor
     · rw [hcost, hc3, hc4, hc5, hc6]
-      have hoff : C.offset ≤ Ω := by omega
-      have hsteple : step ≤ Ω := by omega
-      have hso : step * C.offset ≤ Ω := by omega
-      have hwid : C.width ≤ Ω := by omega
-      have hL : C.init.length ≤ Ω := by omega
-      have hsb : line * C.init.length + step * C.offset + C.init.length ≤ Ω := by
-        rw [hsucc] at hΩidx
-        omega
-      have hMulle := le_trans hcMul (mulLoopClose C.offset step Ω hoff hsteple hso)
-      have hSuble := le_trans hcSub
-        (subLoopClose (step * C.offset + C.width) C.init.length Ω (by omega) hL)
-      set K := Cmd.flatK (sentBitBody 0) with hK
-      set P2 := (Ω + 1) * (Ω + 1) with hP2
-      set P3 := (Ω + 1) * P2 with hP3
-      have hP2exp : P2 = Ω * Ω + 2 * Ω + 1 := by rw [hP2]; ring
-      have hP23 : P2 ≤ P3 := by
-        rw [hP3]
-        exact Nat.le_mul_of_pos_left P2 (by omega)
-      have hKP3 : 0 ≤ (2 * K + 44) * P3 := Nat.zero_le _
-      have h44_100 : (2 * K + 44) * P3 + 56 * P3 = (2 * K + 100) * P3 := by ring
-      omega
+      exact stepBody_close_fail (Cmd.flatK (sentBitBody 0)) Ω (line * C.init.length)
+        C.init.length step C.offset C.width (State.get u CARDS).length _ _
+        hidx hcMul hcSub
     · rw [heval, emitFtrue_frame _ WREG (by decide), h9WREG]
       exact hΩW
 
@@ -1825,6 +1845,56 @@ private theorem emitBitsFromScan_WREG (BASE bound : Nat) (u : State) (W : Nat)
         exact hBf)
   exact hInv.1
 
+private theorem finalStep_idx {sl so step off bl L Ω : Nat}
+    (h : sl + so + step + off + bl + L ≤ Ω) : sl + so + bl ≤ Ω := by
+  omega
+
+private theorem finalStep_close_pass (K Ω sl L step off bl cM cS cScan : Nat)
+    (hidx : sl + step * off + step + off + bl + L ≤ Ω)
+    (hcMul : cM ≤ 1 + step * (2 * (0 + step * off + off) + 1) + step * step)
+    (hcSub : cS ≤ 1 + L * (step * off + bl + 1) + L * L)
+    (hcScan : cScan ≤ (K + 6) * ((Ω + 1) * (Ω + 1))) :
+    1 + 1 + (1 + cM
+      + (1 + (2 * (step * off + bl) + 1)
+      + (1 + (step * off + bl + 1)
+      + (1 + cS
+      + (1 + 1
+      + (1 + 4
+      + (1 + (2 * (sl + step * off) + 1)
+      + (1 + (1 + (bl + 1) + cScan)))))))))
+      ≤ (K + 60) * ((Ω + 1) * (Ω + 1)) := by
+  have hMulle := le_trans hcMul
+    (mulLoopClose off step Ω (by omega) (by omega) (by omega))
+  have hSuble := le_trans hcSub
+    (subLoopClose (step * off + bl) L Ω (by omega) (by omega))
+  set P2 := (Ω + 1) * (Ω + 1) with hP2
+  have hP2exp : P2 = Ω * Ω + 2 * Ω + 1 := by rw [hP2]; ring
+  have hfin : (K + 60) * P2 = (K + 6) * P2 + 54 * P2 := by ring
+  omega
+
+private theorem finalStep_close_fail (K Ω sl L step off bl cM cS : Nat)
+    (hidx : sl + step * off + step + off + bl + L ≤ Ω)
+    (hcMul : cM ≤ 1 + step * (2 * (0 + step * off + off) + 1) + step * step)
+    (hcSub : cS ≤ 1 + L * (step * off + bl + 1) + L * L) :
+    1 + 1 + (1 + cM
+      + (1 + (2 * (step * off + bl) + 1)
+      + (1 + (step * off + bl + 1)
+      + (1 + cS
+      + (1 + 1
+      + (1 + 2
+      + (1 + (2 * (sl + step * off) + 1)
+      + (1 + 9))))))))
+      ≤ (K + 60) * ((Ω + 1) * (Ω + 1)) := by
+  have hMulle := le_trans hcMul
+    (mulLoopClose off step Ω (by omega) (by omega) (by omega))
+  have hSuble := le_trans hcSub
+    (subLoopClose (step * off + bl) L Ω (by omega) (by omega))
+  set P2 := (Ω + 1) * (Ω + 1) with hP2
+  have hP2exp : P2 = Ω * Ω + 2 * Ω + 1 := by rw [hP2]; ring
+  have hKP2 : 0 ≤ K * P2 := Nat.zero_le _
+  have hfin : (K + 60) * P2 = K * P2 + 60 * P2 := by ring
+  omega
+
 /-- **`finalStepBody` cost**: quadratic in `Ω`, plus the `WREG ≤ Ω` exit fact. -/
 theorem finalStepBody_cost (C : BinaryCC) (step : Nat) (bits : List Bool) (u : State)
     (Ω : Nat)
@@ -2041,11 +2111,11 @@ theorem finalStepBody_cost (C : BinaryCC) (step : Nat) (bits : List Bool) (u : S
       hw9F hw9FBITSlen hw9SCAN
       (by rw [hw9OUT, ← hstep]; exact hΩO)
       (by rw [hw9WREG]; exact hΩW)
-      (by omega)
+      (finalStep_idx hΩidx)
     have hWScan := emitBitsFromScan_WREG FSTART FBITS w9 Ω
       (by decide) (by decide) (by decide) (by decide)
       (by rw [hw9WREG]; exact hΩW)
-      (by rw [hw9F, List.length_replicate, hw9FBITSlen]; omega)
+      (by rw [hw9F, List.length_replicate, hw9FBITSlen]; exact finalStep_idx hΩidx)
     have hcost : finalStepBody.cost u
         = 1 + 1 + (1 + (Cmd.forBnd KTMP2 KFSTEP (Cmd.op (.concat STEPO STEPO OFFSET))).cost w1
           + (1 + Op.cost (.concat SUMW STEPO BLEN) w2
@@ -2070,27 +2140,14 @@ theorem finalStepBody_cost (C : BinaryCC) (step : Nat) (bits : List Bool) (u : S
         Cmd.eval_ifBit_true _ _ _ _ hw8G, Cmd.eval_seq, e9]
     constructor
     · rw [hcost, hc3, hc4, hc8, hc9]
-      have hoff : C.offset ≤ Ω := by omega
-      have hsteple : step ≤ Ω := by omega
-      have hso : step * C.offset ≤ Ω := by omega
-      have hbl : bits.length ≤ Ω := by omega
-      have hL : C.init.length ≤ Ω := by omega
-      have hsl : C.steps * C.init.length + step * C.offset ≤ Ω := by omega
-      have hMulle := le_trans hcMul (mulLoopClose C.offset step Ω hoff hsteple hso)
-      have hSuble := le_trans hcSub
-        (subLoopClose (step * C.offset + bits.length) C.init.length Ω (by omega) hL)
-      have hScanle := hcScan
-      set K := Cmd.flatK (bsBody 0) with hK
-      clear_value K
-      set P2 := (Ω + 1) * (Ω + 1) with hP2
-      have hP2exp : P2 = Ω * Ω + 2 * Ω + 1 := by rw [hP2]; ring
-      have hfin : (K + 60) * P2 = (K + 6) * P2 + 54 * P2 := by ring
-      omega
+      exact finalStep_close_pass (Cmd.flatK (bsBody 0)) Ω (C.steps * C.init.length)
+        C.init.length step C.offset bits.length _ _ _ hΩidx hcMul hcSub hcScan
     · rw [heval]
       exact hWScan
   · -- guard fails → emitFalse
     obtain ⟨k, hk⟩ : ∃ k, step * C.offset + bits.length - C.init.length = k + 1 :=
-      ⟨step * C.offset + bits.length - C.init.length - 1, by omega⟩
+      ⟨_, (Nat.sub_add_cancel (show 1 ≤ step * C.offset + bits.length - C.init.length from
+        Nat.sub_pos_of_lt (Nat.not_le.mp hguard))).symm⟩
     have hne : (State.get w5 REM).isEmpty = false := by
       rw [h5REM, hk]
       rfl
@@ -2166,22 +2223,8 @@ theorem finalStepBody_cost (C : BinaryCC) (step : Nat) (bits : List Bool) (u : S
         Cmd.eval_ifBit_false _ _ _ _ hw8Gne]
     constructor
     · rw [hcost, hc3, hc4, hc8]
-      have hoff : C.offset ≤ Ω := by omega
-      have hsteple : step ≤ Ω := by omega
-      have hso : step * C.offset ≤ Ω := by omega
-      have hbl : bits.length ≤ Ω := by omega
-      have hL : C.init.length ≤ Ω := by omega
-      have hsl : C.steps * C.init.length + step * C.offset ≤ Ω := by omega
-      have hMulle := le_trans hcMul (mulLoopClose C.offset step Ω hoff hsteple hso)
-      have hSuble := le_trans hcSub
-        (subLoopClose (step * C.offset + bits.length) C.init.length Ω (by omega) hL)
-      set K := Cmd.flatK (bsBody 0) with hK
-      clear_value K
-      set P2 := (Ω + 1) * (Ω + 1) with hP2
-      have hP2exp : P2 = Ω * Ω + 2 * Ω + 1 := by rw [hP2]; ring
-      have hKP2 : 0 ≤ K * P2 := Nat.zero_le _
-      have hfin : (K + 60) * P2 = K * P2 + 60 * P2 := by ring
-      omega
+      exact finalStep_close_fail (Cmd.flatK (bsBody 0)) Ω (C.steps * C.init.length)
+        C.init.length step C.offset bits.length _ _ hΩidx hcMul hcSub
     · rw [heval, emitFalse_frame _ WREG (by decide), hw8WREG]
       exact hΩW
 
@@ -3678,6 +3721,94 @@ theorem buildFSATBound_output (C : BinaryCC) :
         Nat.mul_le_mul (by omega) hrest
   omega
 
+private theorem buildFSAT_idxWF {n Ω wid off L cl : Nat} (hwid : wid ≤ n) (hoff : off ≤ n)
+    (hL : L ≤ n) (hcl : cl ≤ 2 * n) (hnn : n ≤ n * n) (hq : 20 * (n * n) ≤ Ω) :
+    wid + off + L + cl ≤ Ω := by
+  omega
+
+private theorem buildFSAT_idx5 {n Ω s L off wid cl : Nat} (hs : s ≤ n) (hL : L ≤ n)
+    (hoff : off ≤ n) (hwid : wid ≤ n) (hcl : cl ≤ 2 * n) (hsL : s * L ≤ n * n)
+    (hLo : L * off ≤ n * n) (hnn : n ≤ n * n) (hq : 20 * (n * n) ≤ Ω) :
+    s * L + L * off + L + off + off + wid + L + s + cl ≤ Ω := by
+  omega
+
+private theorem buildFSAT_idx6 {n Ω s L off fl : Nat} (hs : s ≤ n) (hL : L ≤ n)
+    (hoff : off ≤ n) (hfl : fl ≤ 2 * n) (hsL : s * L ≤ n * n)
+    (hLo : L * off ≤ n * n) (hnn : n ≤ n * n) (hq : 20 * (n * n) ≤ Ω) :
+    s * L + L * off + L + off + L + s + fl ≤ Ω := by
+  omega
+
+private theorem sum4_le {a b c Ω : Nat} (h : 4 + a + b + c ≤ Ω) :
+    a ≤ Ω ∧ b ≤ Ω ∧ c ≤ Ω :=
+  ⟨by omega, by omega, by omega⟩
+
+/-- Closing arithmetic of `buildFSAT_cost_le`, wellformed branch. -/
+private theorem buildFSAT_close_wf (n Ω Ks Kb Kr Ke L T cPre cWF cScan cAS cFin : Nat)
+    (hΩ : Ω = masterOmega n) (hK : buildFSATK = 2 * Ks + 2 * Kb + Kr + 2 * Ke + 1000)
+    (hcPre : cPre ≤ 8 * ((Ω + 1) * (Ω + 1)))
+    (hcWF : cWF ≤ (2 * Ke + 160) * ((Ω + 1) * ((Ω + 1) * (Ω + 1))))
+    (hcScan : cScan ≤ (Kb + 6) * ((Ω + 1) * (Ω + 1)))
+    (hAS : cAS ≤ (2 * Ks + 160)
+      * ((Ω + 1) * ((Ω + 1) * ((Ω + 1) * ((Ω + 1) * (Ω + 1))))))
+    (hFin : cFin ≤ (Kb + Kr + 140) * ((Ω + 1) * ((Ω + 1) * ((Ω + 1) * (Ω + 1)))))
+    (hL : L ≤ Ω) (hT : T ≤ Ω) :
+    1 + cPre + (1 + cWF + (1 + 1 + (1 + (1 + (1 + 3 + (1 + 1 + (1 + (L + 1)
+      + (1 + cScan + (1 + 3 + (1 + cAS + cFin))))))) + (T + 1))))
+      ≤ buildFSATBound n := by
+  rw [buildFSATBound, hK, ← hΩ]
+  set P2 := (Ω + 1) * (Ω + 1) with hP2
+  set P3 := (Ω + 1) * P2 with hP3
+  set P4 := (Ω + 1) * P3 with hP4
+  set P5 := (Ω + 1) * P4 with hP5
+  have h1P2 : 1 ≤ P2 := one_le_P Ω
+  have hP23 : P2 ≤ P3 := le_scale Ω P2
+  have hP34 : P3 ≤ P4 := le_scale Ω P3
+  have hP45 : P4 ≤ P5 := le_scale Ω P4
+  have h1P5 : 1 ≤ P5 := le_trans h1P2 (le_trans hP23 (le_trans hP34 hP45))
+  have hΩP5 : Ω + 1 ≤ P5 :=
+    Nat.le_mul_of_pos_right _ (le_trans h1P2 (le_trans hP23 hP34))
+  have hPre5 : 8 * P2 ≤ 8 * P5 :=
+    Nat.mul_le_mul_left _ (le_trans hP23 (le_trans hP34 hP45))
+  have hWF5 : (2 * Ke + 160) * P3 ≤ (2 * Ke + 160) * P5 :=
+    Nat.mul_le_mul_left _ (le_trans hP34 hP45)
+  have hScan5 : (Kb + 6) * P2 ≤ (Kb + 6) * P5 :=
+    Nat.mul_le_mul_left _ (le_trans hP23 (le_trans hP34 hP45))
+  have hFin5 : (Kb + Kr + 140) * P4 ≤ (Kb + Kr + 140) * P5 :=
+    Nat.mul_le_mul_left _ hP45
+  have hfin : (2 * Ks + 2 * Kb + Kr + 2 * Ke + 1000) * P5
+      = (2 * Ks + 160) * P5 + (Kb + Kr + 140) * P5 + (2 * Ke + 160) * P5
+        + (Kb + 6) * P5 + 8 * P5 + 526 * P5 := by ring
+  omega
+
+/-- Closing arithmetic of `buildFSAT_cost_le`, non-wellformed branch. -/
+private theorem buildFSAT_close_nwf (n Ω Ks Kb Kr Ke cPre cWF : Nat)
+    (hΩ : Ω = masterOmega n) (hK : buildFSATK = 2 * Ks + 2 * Kb + Kr + 2 * Ke + 1000)
+    (hcPre : cPre ≤ 8 * ((Ω + 1) * (Ω + 1)))
+    (hcWF : cWF ≤ (2 * Ke + 160) * ((Ω + 1) * ((Ω + 1) * (Ω + 1)))) :
+    1 + cPre + (1 + cWF + (1 + 1 + (1 + (1 + 9) + (5 + 1)))) ≤ buildFSATBound n := by
+  rw [buildFSATBound, hK, ← hΩ]
+  set P2 := (Ω + 1) * (Ω + 1) with hP2
+  set P3 := (Ω + 1) * P2 with hP3
+  set P4 := (Ω + 1) * P3 with hP4
+  set P5 := (Ω + 1) * P4 with hP5
+  have h1P2 : 1 ≤ P2 := one_le_P Ω
+  have hP23 : P2 ≤ P3 := le_scale Ω P2
+  have hP34 : P3 ≤ P4 := le_scale Ω P3
+  have hP45 : P4 ≤ P5 := le_scale Ω P4
+  have h1P5 : 1 ≤ P5 := le_trans h1P2 (le_trans hP23 (le_trans hP34 hP45))
+  have hPre5 : 8 * P2 ≤ 8 * P5 :=
+    Nat.mul_le_mul_left _ (le_trans hP23 (le_trans hP34 hP45))
+  have hWF5 : (2 * Ke + 160) * P3 ≤ (2 * Ke + 160) * P5 :=
+    Nat.mul_le_mul_left _ (le_trans hP34 hP45)
+  have hfin : (2 * Ks + 2 * Kb + Kr + 2 * Ke + 1000) * P5
+      = (2 * Ke + 160) * P5 + (2 * Ks + 2 * Kb + Kr + 840) * P5 := by ring
+  have hslack : 8 * P5 + 21 ≤ (2 * Ks + 2 * Kb + Kr + 840) * P5 := by
+    have h1 : 840 * P5 ≤ (2 * Ks + 2 * Kb + Kr + 840) * P5 :=
+      Nat.mul_le_mul_right _ (Nat.le_add_left _ _)
+    have h2 : 8 * P5 + 21 ≤ 840 * P5 := by omega
+    exact le_trans h2 h1
+  omega
+
 set_option maxRecDepth 4000 in
 /-- **`buildFSAT` cost is polynomial** — the `cost_le` crux of the
 `BinaryCC ⪯p FSAT` witness. The whole accounting is instantiated at the ONE
@@ -3719,6 +3850,9 @@ theorem buildFSAT_cost_le (C : BinaryCC) :
     have h26 : (n + 1) ^ 2 ≤ (n + 1) ^ 6 := Nat.pow_le_pow_right (by omega) (by omega)
     have h2 : (n + 1) ^ 2 = n * n + 2 * n + 1 := by ring
     omega
+  have hLΩ : C.init.length ≤ Ω :=
+    le_trans hLn (le_trans hn_nn
+      (le_trans (Nat.le_mul_of_pos_left (n * n) (by decide : 0 < 20)) hΩquad))
   -- the serF split of the tableau
   have hserFsplit : serF (encodeTableau C)
       = [0, 1] ++ (serF (encodeBitsAt 0 C.init)
@@ -3746,7 +3880,7 @@ theorem buildFSAT_cost_le (C : BinaryCC) :
   have h0ZERO : State.get (encodeIn C) ZERO = [] := rfl
   have h0WREG : State.get (encodeIn C) WREG = [] := rfl
   -- u1 : precompLen (run + cost)
-  have hcPre := precompLen_cost C.init (encodeIn C) Ω h0INIT (by omega)
+  have hcPre := precompLen_cost C.init (encodeIn C) Ω h0INIT hLΩ
   obtain ⟨hpL, hpL1, hpF⟩ := precompLen_run C.init (encodeIn C) h0INIT
   set u1 := precompLen.eval (encodeIn C) with hu1
   have h1STEPS := (hpF STEPS (by decide) (by decide) (by decide)).trans h0STEPS
@@ -3760,7 +3894,7 @@ theorem buildFSAT_cost_le (C : BinaryCC) :
   clear_value u1
   -- u2 : computeWF (run + cost)
   have hcWF := computeWF_cost C u1 Ω h1WID h1OFF hpL h1CARDS h1ZERO
-    (by rw [h1CARDS]; omega)
+    (by rw [h1CARDS]; exact buildFSAT_idxWF hwidn hoffn hLn hcardsn hn_nn hΩquad)
   obtain ⟨hwG, hwF⟩ := computeWF_run C u1 h1WID h1OFF hpL h1CARDS h1ZERO
   set u2 := computeWF.eval u1 with hu2
   have h2STEPS := (hwF STEPS (by decide) (by decide) (by decide) (by decide) (by decide)
@@ -3857,9 +3991,7 @@ theorem buildFSAT_cost_le (C : BinaryCC) :
         + (serF (encodeAllStepConstraints C)).length
         + (serF (encodeFinalConstraint C)).length ≤ Ω := by
       rw [← hserFlen]; exact hTabΩ
-    have hbitsΩ : (serF (encodeBitsAt 0 C.init)).length ≤ Ω := by omega
-    have hstepsΩ : (serF (encodeAllStepConstraints C)).length ≤ Ω := by omega
-    have hfinalΩ : (serF (encodeFinalConstraint C)).length ≤ Ω := by omega
+    obtain ⟨hbitsΩ, hstepsΩ, hfinalΩ⟩ := sum4_le hTabΩsplit
     -- v1 : emitFandTag
     have e_v1 : emitFandTag.eval u3 = u3.set OUT [0, 1] := by
       rw [emitFandTag_run, h3OUT, List.nil_append]
@@ -3910,13 +4042,11 @@ theorem buildFSAT_cost_le (C : BinaryCC) :
           simp only [List.length_cons, List.length_nil]
           omega)
       (by rw [h3WREGv]; exact Nat.zero_le Ω)
-      (by omega)
+      (by rw [Nat.zero_add]; exact hLΩ)
     have hWScan := emitBitsFromScan_WREG ZERO INIT v3 Ω
       (by decide) (by decide) (by decide) (by decide)
       (by rw [h3WREGv]; exact Nat.zero_le Ω)
-      (by rw [h3ZEROv, h3INITlen]
-          simp only [List.length_replicate]
-          omega)
+      (by rw [h3ZEROv, h3INITlen, List.length_replicate, Nat.zero_add]; exact hLΩ)
     obtain ⟨h4SCAN, h4OUT, h4F⟩ := emitBitsFromScan_run ZERO INIT 0 C.init v3
       (by decide) (by decide) (by decide) (by decide) (by decide)
       h3ZEROv h3INITlen hv3SCAN
@@ -3970,7 +4100,7 @@ theorem buildFSAT_cost_le (C : BinaryCC) :
         + C.offset + C.offset + C.width + C.init.length + C.steps
         + (State.get v5 CARDS).length ≤ Ω := by
       rw [h5CARDS]
-      omega
+      exact buildFSAT_idx5 hstepsn hLn hoffn hwidn hcardsn hsLn hLon hn_nn hΩquad
     have hcAS := emitAllSteps_cost C v5 Ω h5STEPS h5OFF h5WID h5LREG h5LREG1
       h5CARDS h5ZERO hΩO5 h5WREG hΩidx5
     obtain ⟨h6OUT, h6ZERO, h6F⟩ := emitAllSteps_run C v5
@@ -4011,7 +4141,7 @@ theorem buildFSAT_cost_le (C : BinaryCC) :
     have hΩidx6 : C.steps * C.init.length + C.init.length * C.offset + C.init.length
         + C.offset + C.init.length + C.steps + (State.get v6 FINAL).length ≤ Ω := by
       rw [h6FINAL]
-      omega
+      exact buildFSAT_idx6 hstepsn hLn hoffn hfinaln hsLn hLon hn_nn hΩquad
     have hcFin := emitFinal_cost C v6 Ω h6STEPS h6OFF h6LREG h6LREG1 h6FINAL h6ZERO
       hΩO6 h6WREG hΩidx6
     obtain ⟨h7OUT, h7ZERO, h7F⟩ := emitFinal_run C v6
@@ -4065,58 +4195,9 @@ theorem buildFSAT_cost_le (C : BinaryCC) :
       simp only [List.length_append, List.length_cons, List.length_nil]
       omega
     rw [hcIf, hc_v3, hvIfOUT]
-    -- gather the bounds and close
-    have hAS := hcAS.1
-    have hFin := hcFin.1
-    set Ks := Cmd.flatK (sentBitBody 0) with hKs
-    clear_value Ks
-    set Kb := Cmd.flatK (bsBody 0) with hKb
-    clear_value Kb
-    set Kr := Cmd.flatK readFinBody with hKr
-    clear_value Kr
-    set Ke := Cmd.flatK cardLenElemBody with hKe
-    clear_value Ke
-    set P2 := (Ω + 1) * (Ω + 1) with hP2
-    set P3 := (Ω + 1) * P2 with hP3
-    set P4 := (Ω + 1) * P3 with hP4
-    set P5 := (Ω + 1) * P4 with hP5
-    set cPre := precompLen.cost (encodeIn C) with hcPreDef
-    clear_value cPre
-    set cWF := computeWF.cost u1 with hcWFDef
-    clear_value cWF
-    set cScan := (emitBitsFromScan ZERO INIT).cost v3 with hcScanDef
-    clear_value cScan
-    set cAS := emitAllSteps.cost v5 with hcASDef
-    clear_value cAS
-    set cFin := emitFinal.cost v6 with hcFinDef
-    clear_value cFin
-    have h1P2 : 1 ≤ P2 := by rw [hP2]; exact one_le_P Ω
-    have hP23 : P2 ≤ P3 := by rw [hP3]; exact le_scale Ω P2
-    have hP34 : P3 ≤ P4 := by rw [hP4]; exact le_scale Ω P3
-    have hP45 : P4 ≤ P5 := by rw [hP5]; exact le_scale Ω P4
-    have h1P5 : 1 ≤ P5 := le_trans h1P2 (le_trans hP23 (le_trans hP34 hP45))
-    have hΩP5 : Ω + 1 ≤ P5 := by
-      calc Ω + 1 = (Ω + 1) * 1 := by ring
-        _ ≤ (Ω + 1) * P4 := Nat.mul_le_mul_left _ (le_trans h1P2 (le_trans hP23 hP34))
-        _ = P5 := by rw [hP5]
-    have hPre5 : 8 * P2 ≤ 8 * P5 :=
-      Nat.mul_le_mul_left _ (le_trans hP23 (le_trans hP34 hP45))
-    have hWF5 : (2 * Ke + 160) * P3 ≤ (2 * Ke + 160) * P5 :=
-      Nat.mul_le_mul_left _ (le_trans hP34 hP45)
-    have hScan5 : (Kb + 6) * P2 ≤ (Kb + 6) * P5 :=
-      Nat.mul_le_mul_left _ (le_trans hP23 (le_trans hP34 hP45))
-    have hFin5 : (Kb + Kr + 140) * P4 ≤ (Kb + Kr + 140) * P5 :=
-      Nat.mul_le_mul_left _ hP45
-    have hLΩ : C.init.length ≤ Ω := by omega
-    have hfin : (2 * Ks + 2 * Kb + Kr + 2 * Ke + 1000) * P5
-        = (2 * Ks + 160) * P5 + (Kb + Kr + 140) * P5 + (2 * Ke + 160) * P5
-          + (Kb + 6) * P5 + 8 * P5 + 526 * P5 := by ring
-    have hgoal : buildFSATBound n
-        = (2 * Ks + 2 * Kb + Kr + 2 * Ke + 1000) * P5 := by
-      simp only [buildFSATBound, buildFSATK_eq hKs hKb hKr hKe, ← hΩdef,
-        ← hP2, ← hP3, ← hP4, ← hP5]
-    rw [hgoal]
-    omega
+    exact buildFSAT_close_wf n Ω (Cmd.flatK (sentBitBody 0)) (Cmd.flatK (bsBody 0))
+      (Cmd.flatK readFinBody) (Cmd.flatK cardLenElemBody) C.init.length _ _ _ _ _ _
+      hΩdef (buildFSATK_eq rfl rfl rfl rfl) hcPre hcWF hcScan hcAS.1 hcFin.1 hLΩ hTabΩ
   · -- not wellformed: the `emitFalse` branch
     have hGne : State.get u3 GWF ≠ [1] := by
       rw [h3GWF, if_neg hWf]; decide
@@ -4135,44 +4216,9 @@ theorem buildFSAT_cost_le (C : BinaryCC) :
         emitFalse).cost u3 = 1 + 9 := by
       rw [Cmd.cost_ifBit_false _ _ _ _ hGne, emitFalse_cost]
     rw [hcIf, hvIfOUT]
-    set Ks := Cmd.flatK (sentBitBody 0) with hKs
-    clear_value Ks
-    set Kb := Cmd.flatK (bsBody 0) with hKb
-    clear_value Kb
-    set Kr := Cmd.flatK readFinBody with hKr
-    clear_value Kr
-    set Ke := Cmd.flatK cardLenElemBody with hKe
-    clear_value Ke
-    set P2 := (Ω + 1) * (Ω + 1) with hP2
-    set P3 := (Ω + 1) * P2 with hP3
-    set P4 := (Ω + 1) * P3 with hP4
-    set P5 := (Ω + 1) * P4 with hP5
-    set cPre := precompLen.cost (encodeIn C) with hcPreDef
-    clear_value cPre
-    set cWF := computeWF.cost u1 with hcWFDef
-    clear_value cWF
-    have h1P2 : 1 ≤ P2 := by rw [hP2]; exact one_le_P Ω
-    have hP23 : P2 ≤ P3 := by rw [hP3]; exact le_scale Ω P2
-    have hP34 : P3 ≤ P4 := by rw [hP4]; exact le_scale Ω P3
-    have hP45 : P4 ≤ P5 := by rw [hP5]; exact le_scale Ω P4
-    have h1P5 : 1 ≤ P5 := le_trans h1P2 (le_trans hP23 (le_trans hP34 hP45))
-    have hPre5 : 8 * P2 ≤ 8 * P5 :=
-      Nat.mul_le_mul_left _ (le_trans hP23 (le_trans hP34 hP45))
-    have hWF5 : (2 * Ke + 160) * P3 ≤ (2 * Ke + 160) * P5 :=
-      Nat.mul_le_mul_left _ (le_trans hP34 hP45)
-    have hfin : (2 * Ks + 2 * Kb + Kr + 2 * Ke + 1000) * P5
-        = (2 * Ke + 160) * P5 + (2 * Ks + 2 * Kb + Kr + 840) * P5 := by ring
-    have hslack : 8 * P5 + 21 ≤ (2 * Ks + 2 * Kb + Kr + 840) * P5 := by
-      have h1 : 840 * P5 ≤ (2 * Ks + 2 * Kb + Kr + 840) * P5 :=
-        Nat.mul_le_mul_right _ (by omega)
-      have h2 : 8 * P5 + 21 ≤ 840 * P5 := by omega
-      omega
-    have hgoal : buildFSATBound n
-        = (2 * Ks + 2 * Kb + Kr + 2 * Ke + 1000) * P5 := by
-      simp only [buildFSATBound, buildFSATK_eq hKs hKb hKr hKe, ← hΩdef,
-        ← hP2, ← hP3, ← hP4, ← hP5]
-    rw [hgoal]
-    omega
+    exact buildFSAT_close_nwf n Ω (Cmd.flatK (sentBitBody 0)) (Cmd.flatK (bsBody 0))
+      (Cmd.flatK readFinBody) (Cmd.flatK cardLenElemBody) _ _ hΩdef
+      (buildFSATK_eq rfl rfl rfl rfl) hcPre hcWF
 
 /-! ### The mechanical witness fields -/
 

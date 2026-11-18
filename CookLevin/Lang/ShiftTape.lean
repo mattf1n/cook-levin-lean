@@ -94,7 +94,27 @@ theorem insertCarryTM_valid (ins : Nat) (h_ins : ins < 4) :
 the carried value `s - 1`. -/
 private def owed (ins s : Nat) : Nat := if s = 0 then ins else s - 1
 
-set_option maxHeartbeats 1600000 in
+/-- One step of a single-tape machine from state `s` on a tape reading `sym`, given that the
+first table entry matching `(s, sym)` is `mkE s sym d w mv`. -/
+private theorem step_of_find (M : FlatTM) (s d : Nat) (sym w : Option Nat) (mv : TMMove)
+    (t : List Nat × Nat × List Nat) (hsym : currentTapeSymbol t = sym)
+    (hfind : M.trans.find? (fun e => e.src_state == s && decide (e.src_tape_vals = [sym]))
+      = some (mkE s sym d w mv)) :
+    stepFlatTM M { state_idx := s, tapes := [t] }
+      = some { state_idx := d, tapes := [tapeStep t w mv] } := by
+  subst hsym
+  unfold stepFlatTM
+  rw [show (M.trans.find? fun e => entryMatchesConfig e { state_idx := s, tapes := [t] })
+      = some (mkE s (currentTapeSymbol t) d w mv) from hfind]
+  rfl
+
+/-- Writing `v` on an in-range cell and moving right. -/
+private theorem tapeStep_write_R (left right : List Nat) (head v : Nat)
+    (hlt : head < right.length) :
+    tapeStep (left, head, right) (some v) .Rmove
+      = (left, head + 1, right.take head ++ v :: right.drop (head + 1)) := by
+  simp [tapeStep, writeCurrentTapeSymbol, moveTapeHead, hlt]
+
 /-- One step on an in-range cell: write the owed value, move right, and
 switch to the carry state for the symbol just read. -/
 theorem insertCarryTM_step_nonblank (ins s y : Nat) (hs : s < 5) (hy : y < 4)
@@ -107,9 +127,9 @@ theorem insertCarryTM_step_nonblank (ins s y : Nat) (hs : s < 5) (hy : y < 4)
                           right.take head ++ owed ins s :: right.drop (head + 1))] } := by
   have hsym : currentTapeSymbol (left, head, right) = some y := by
     rw [currentTapeSymbol_in_range hlt, hget]
-  interval_cases s <;> interval_cases y <;>
-    simp [hsym, hlt, owed, stepFlatTM, insertCarryTM, insertCarryTrans, mkE,
-      entryMatchesConfig, applyTransitionEntry, tapeStep, writeCurrentTapeSymbol, moveTapeHead]
+  rw [← tapeStep_write_R left right head (owed ins s) hlt]
+  refine step_of_find _ s (1 + y) (some y) (some (owed ins s)) .Rmove _ hsym ?_
+  interval_cases s <;> interval_cases y <;> rfl
 
 /-- One step on the blank **frontier** cell (`head = right.length`): write the
 owed value (appending one cell) and halt. -/
@@ -123,9 +143,12 @@ theorem insertCarryTM_step_blank (ins s : Nat) (hs : s < 5)
   have hge : ¬ right.length < right.length := Nat.lt_irrefl _
   have hsym : currentTapeSymbol (left, right.length, right) = none :=
     currentTapeSymbol_out_of_range hge
-  interval_cases s <;>
-    simp [hsym, hge, owed, stepFlatTM, insertCarryTM, insertCarryTrans, mkE,
-      entryMatchesConfig, applyTransitionEntry, tapeStep, writeCurrentTapeSymbol, moveTapeHead]
+  have htape : tapeStep (left, right.length, right) (some (owed ins s)) .Nmove
+      = (left, right.length, right ++ [owed ins s]) := by
+    simp [tapeStep, writeCurrentTapeSymbol, moveTapeHead]
+  rw [← htape]
+  refine step_of_find _ s 5 none (some (owed ins s)) .Nmove _ hsym ?_
+  interval_cases s <;> rfl
 
 /-- Unfold one non-halting step of a run. -/
 private theorem run_succ_of_step (M : FlatTM) (cfg c' : FlatTMConfig) (n : Nat)
@@ -410,9 +433,8 @@ theorem deleteCarryTM_read_nonblank (y : Nat) (hy : y < 4)
       = some { state_idx := 1 + y, tapes := [(left, head - 1, right)] } := by
   have hsym : currentTapeSymbol (left, head, right) = some y := by
     rw [currentTapeSymbol_in_range hlt, hget]
-  interval_cases y <;>
-    simp [hsym, stepFlatTM, deleteCarryTM, deleteCarryTrans, mkE,
-      entryMatchesConfig, applyTransitionEntry, tapeStep, writeCurrentTapeSymbol, moveTapeHead]
+  refine step_of_find _ 0 (1 + y) (some y) none .Lmove _ hsym ?_
+  interval_cases y <;> rfl
 
 /-- **read step (blank).** From state `0` on the blank past the end, halt. -/
 theorem deleteCarryTM_read_blank (left right : List Nat) (head : Nat)
@@ -421,8 +443,7 @@ theorem deleteCarryTM_read_blank (left right : List Nat) (head : Nat)
       = some { state_idx := 6, tapes := [(left, head, right)] } := by
   have hsym : currentTapeSymbol (left, head, right) = none :=
     currentTapeSymbol_out_of_range hge
-  simp [hsym, stepFlatTM, deleteCarryTM, deleteCarryTrans, mkE, entryMatchesConfig,
-    applyTransitionEntry, tapeStep, writeCurrentTapeSymbol, moveTapeHead]
+  exact step_of_find _ 0 6 none none .Nmove _ hsym rfl
 
 /-- **write step.** From the write state `1 + v` (carrying `v`), reading an
 in-range cell, write `v` at the head (overwriting the stale cell), move right,
@@ -435,9 +456,9 @@ theorem deleteCarryTM_write (v y : Nat) (hv : v < 4) (hy : y < 4)
                tapes := [(left, head + 1, right.take head ++ v :: right.drop (head + 1))] } := by
   have hsym : currentTapeSymbol (left, head, right) = some y := by
     rw [currentTapeSymbol_in_range hlt, hget]
-  interval_cases v <;> interval_cases y <;>
-    simp [hsym, hlt, stepFlatTM, deleteCarryTM, deleteCarryTrans, mkE,
-      entryMatchesConfig, applyTransitionEntry, tapeStep, writeCurrentTapeSymbol, moveTapeHead]
+  rw [← tapeStep_write_R left right head v hlt]
+  refine step_of_find _ (1 + v) 5 (some y) (some v) .Rmove _ hsym ?_
+  interval_cases v <;> interval_cases y <;> rfl
 
 /-- **skip step.** From skip state `5`, reading an in-range cell, write `0`
 (clearing the stale cell), move right, switch back to read. -/
@@ -449,9 +470,9 @@ theorem deleteCarryTM_skip (y : Nat) (hy : y < 4)
                tapes := [(left, head + 1, right.take head ++ 0 :: right.drop (head + 1))] } := by
   have hsym : currentTapeSymbol (left, head, right) = some y := by
     rw [currentTapeSymbol_in_range hlt, hget]
-  interval_cases y <;>
-    simp [hsym, hlt, stepFlatTM, deleteCarryTM, deleteCarryTrans, mkE,
-      entryMatchesConfig, applyTransitionEntry, tapeStep, writeCurrentTapeSymbol, moveTapeHead]
+  rw [← tapeStep_write_R left right head 0 hlt]
+  refine step_of_find _ 5 0 (some y) (some 0) .Rmove _ hsym ?_
+  interval_cases y <;> rfl
 
 /-- Non-halt states `0 … 5` of the delete-carry machine. -/
 private theorem delete_not_halt (s : Nat) (hs : s < 6) (cfg : FlatTMConfig)

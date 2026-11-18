@@ -415,6 +415,12 @@ theorem budgetBody_BUD_le (w : State) :
     refine le_trans (budgetBodyInner_BUD_le w1) ?_; rw [hBUDw1]
   · rw [Cmd.eval_ifBit_false _ _ _ _ h, nop, getne _ _ _ (by decide), hBUDw1]; omega
 
+private theorem subtreeScan_fin (m : Nat) :
+    1 + (m + 1) + (1 + 1 + (1 + 1 + (1 + 1 +
+      (1 + m * (1600 * (m + 1) * (m + 1) + 2 * (m + 1) + 3 * m + 70) + m * m))))
+      ≤ 2000 * (m + 1) ^ 3 := by
+  ring_nf; omega
+
 set_option maxHeartbeats 1000000 in
 /-- **`subtreeScan` cost bound** — `O(m³)` where `m = |SCAN|` (the budget loop
 runs `m` times, each `budgetBody` costs `O(m²)`). -/
@@ -470,11 +476,10 @@ theorem subtreeScan_cost (u : State) :
   rw [hc_copy, hc_cb, hc_ab, hc_ct]
   -- combine: prefix (m+8) + loop (1 + m*B + m²) ≤ 2000(m+1)³
   have hfin : 1 + (m + 1) + (1 + 1 + (1 + 1 + (1 + 1 + (1 + m * B + m * m))))
-      ≤ 2000 * (m + 1) ^ 3 := by
-    rw [hB]
-    nlinarith [Nat.zero_le m, sq_nonneg m, Nat.mul_le_mul_left m (Nat.le_refl (m+1))]
+      ≤ 2000 * (m + 1) ^ 3 := subtreeScan_fin m
   refine le_trans ?_ hfin
-  gcongr
+  exact Nat.add_le_add_left (Nat.add_le_add_left (Nat.add_le_add_left
+    (Nat.add_le_add_left hloop _) _) _) _
 
 /-! ## Cost accounting — gadget cost constant + token-count (`T`) effect -/
 
@@ -718,6 +723,7 @@ private theorem brBin_cost (emitG : Cmd) (hlf : emitG.loopFree = true)
   clear_value P
   set X := (E + N + 3) ^ 3 with hX
   clear_value X
+  clear * - hss hcc hVL1 hT1 hg hNX h27X
   omega
 
 /-- fvar branch payload: drain the unary payload into `VREG`, emit the equiv
@@ -793,6 +799,7 @@ private theorem brVar_cost (st : State) (E N : Nat)
   clear_value P
   set X := (E + N + 3) ^ 3 with hX
   clear_value X
+  clear * - hloop hg hNX h27X
   omega
 
 /-- The 11x sub-tree: read the third tag bit, dispatch fvar/fneg. -/
@@ -868,6 +875,7 @@ private theorem brTag11_cost (st : State) (E N : Nat)
   clear_value PN
   set X := (E + N + 3) ^ 3 with hX
   clear_value X
+  clear * - hvar hneg hif hSCAN1 hNX h27X
   omega
 
 /-- The whole tag-dispatch tree: `ifBit H1 (ifBit H2 (11x) (10)) (ifBit H2 (01) (00))`,
@@ -985,6 +993,7 @@ private theorem tree_cost (st : State) (E N : Nat)
   clear_value PN
   set X := (E + N + 3) ^ 3 with hX
   clear_value X
+  clear * - h11 hor hand htrue hifA hifB hifTop hNX h27X
   omega
 
 set_option maxHeartbeats 800000 in
@@ -1191,6 +1200,7 @@ theorem tokenBody_cost (s : State) (E N : Nat)
     clear_value PN
     set X := (E + N + 3) ^ 3 with hX
     clear_value X
+    clear * - hB1 hK1 hVAa1 hSCANa4 hSCANa6 htree hNX h27X
     omega
   -- assemble: guard + ifBit + nop
   have hif := cost_ifBit_le NE
@@ -1279,6 +1289,7 @@ theorem tokenBody_cost (s : State) (E N : Nat)
   clear_value PN
   set X := (E + N + 3) ^ 3 with hX
   clear_value X
+  clear * - hif hbig hNX h27X
   omega
 
 /-! ## Cost accounting — the outer token loop (`outerLoop_cost`)
@@ -1293,6 +1304,21 @@ iteration — the uniform ceiling `tokenBody_cost` needs. -/
 private theorem tokRem_length_le (g : formula) (rest : List Nat) :
     (tokRem g rest).length ≤ (serF g ++ rest).length := by
   cases g <;> simp [tokRem, BinaryCCFSATFree.serF] <;> omega
+
+/-- A frozen `min` stays frozen one step later. -/
+private theorem min_succ_eq {i fs : Nat} (h : min i fs = fs) : min (i + 1) fs = min i fs := by
+  omega
+
+/-- A nonempty forest of pending subtrees (`a = b + c`, `1 ≤ b`) pins `i < fs`. -/
+private theorem cons_min_facts {a b c i fs : Nat} (hcons : a + min i fs = fs)
+    (hsum : a = b + c) (hb : 1 ≤ b) :
+    i < fs ∧ min i fs = i ∧ min (i + 1) fs = i + 1 := by
+  omega
+
+/-- The Dyck size bookkeeping after one `tokForest` step. -/
+private theorem forest_cons_sum {t r g a m i fs : Nat} (ht : t + 1 = r + g)
+    (hsum : a = g + r) (hcons : a + m = fs) (hm : m = i) : t + (i + 1) = fs := by
+  omega
 
 set_option maxHeartbeats 1000000 in
 /-- **The outer-loop cost bound**: with the loop entry laid out as in
@@ -1369,7 +1395,7 @@ theorem outerLoop_cost (u : State) (f : formula) (C0 T0 : List Nat) (E : Nat)
         -- exhausted: idle step, invariant frozen
         have hSCnil : State.get w SCAN = [] := by rw [hwSC]; simp
         have hmineq : min i (formula_size f) = formula_size f := by
-          simp only [List.map_nil, List.sum_nil, Nat.zero_add] at hcons; omega
+          simp only [List.map_nil, List.sum_nil, Nat.zero_add] at hcons; exact hcons
         rw [hidle w hSCnil]
         refine ⟨?_, [], done, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
         · rw [State.get_set_ne _ _ _ _ (show SCAN ≠ SKIP by decide),
@@ -1378,16 +1404,16 @@ theorem outerLoop_cost (u : State) (f : formula) (C0 T0 : List Nat) (E : Nat)
         · rw [State.get_set_ne _ _ _ _ (show SCAN ≠ SKIP by decide),
             State.get_set_ne _ _ _ _ (show SCAN ≠ NE by decide), hwSC]
         · rw [State.get_set_ne _ _ _ _ (show K ≠ SKIP by decide),
-            State.get_set_ne _ _ _ _ (show K ≠ NE by decide), hwK]
-          congr 1; omega
+            State.get_set_ne _ _ _ _ (show K ≠ NE by decide), hwK, min_succ_eq hmineq]
         · rw [State.get_set_ne _ _ _ _ (show CNFOUT ≠ SKIP by decide),
             State.get_set_ne _ _ _ _ (show CNFOUT ≠ NE by decide), hwCN]
         · rw [State.get_set_ne _ _ _ _ (show TALLY ≠ SKIP by decide),
             State.get_set_ne _ _ _ _ (show TALLY ≠ NE by decide), hwTL]
         · rw [State.get_set_ne _ _ _ _ (show B ≠ SKIP by decide),
             State.get_set_ne _ _ _ _ (show B ≠ NE by decide), hwB]
-        · simp only [List.map_nil, List.sum_nil, Nat.zero_add]; omega
-        · rw [show min (i + 1) (formula_size f) = formula_size f from by omega]
+        · simp only [List.map_nil, List.sum_nil, Nat.zero_add]
+          exact (min_succ_eq hmineq).trans hmineq
+        · rw [(min_succ_eq hmineq).trans hmineq]
           rw [show min i (formula_size f) = formula_size f from hmineq] at hscan
           exact hscan
     | cons g₀ hs' =>
@@ -1395,11 +1421,10 @@ theorem outerLoop_cost (u : State) (f : formula) (C0 T0 : List Nat) (E : Nat)
         have hsumdec : ((g₀ :: hs').map formula_size).sum
             = formula_size g₀ + (hs'.map formula_size).sum := by
           simp [List.map_cons, List.sum_cons]
-        have hi_lt : i < formula_size f := by omega
-        have hmin : min i (formula_size f) = i := by omega
-        have hmin1 : min (i + 1) (formula_size f) = i + 1 := by omega
+        obtain ⟨hi_lt, hmin, hmin1⟩ := cons_min_facts hcons hsumdec hg0pos
+        have hiL : i ≤ L := Nat.le_of_lt (Nat.lt_of_lt_of_le hi_lt hfsL)
         have hwSC' : State.get w SCAN = serF g₀ ++ (hs'.map serF).flatten := by
-          rw [hwSC]; simp [List.map_cons, List.flatten_cons]
+          rw [hwSC]; simp only [List.map_cons, List.flatten_cons]
         obtain ⟨hbCN, hbTL, hbSC, hbK, hbB, _⟩ :=
           tokenBody_run w g₀ L (min i (formula_size f)) ((hs'.map serF).flatten) hwSC' hwB hwK
         refine ⟨?_, tokForest g₀ hs', done ++ tokHead L (min i (formula_size f)) g₀,
@@ -1415,14 +1440,15 @@ theorem outerLoop_cost (u : State) (f : formula) (C0 T0 : List Nat) (E : Nat)
             ← List.replicate_add]
         · rw [hbB]
         · rw [hmin1]
-          have := tokForest_sum g₀ hs'; simp only [hsumdec] at hcons ⊢; omega
+          exact forest_cons_sum (tokForest_sum g₀ hs') hsumdec hcons hmin
         · rw [hmin] at hscan
           rw [hmin, hmin1, hscan,
             show (List.map serF (g₀ :: hs')).flatten = serF g₀ ++ (hs'.map serF).flatten from by
-              simp [List.map_cons, List.flatten_cons],
-            show L + 1 - i = (L - i) + 1 from by omega,
+              simp only [List.map_cons, List.flatten_cons],
+            show L + 1 - i = (L - i) + 1 from Nat.sub_add_comm hiL,
             scanClauses_tok L (L - i) i g₀ ((hs'.map serF).flatten),
-            tokForest_flatten, show L + 1 - (i + 1) = L - i from by omega, List.append_assoc]
+            tokForest_flatten, show L + 1 - (i + 1) = L - i from Nat.add_sub_add_right L 1 i,
+            List.append_assoc]
   -- the per-iteration cost ceiling
   have hCost : ∀ i st, i < (State.get u SERF).length → M i st →
       tokenBody.cost (st.set IDX1 (List.replicate i 1)) ≤ tokFK * (E + L + 3) ^ 3 := by
@@ -1515,6 +1541,59 @@ theorem satBound_output (f : formula) :
 private theorem encodeLit_length (pol : Bool) (v : Nat) :
     (encodeLit (pol, v)).length = v + 3 := by
   simp [EvalCnfCmd.encodeLit]
+
+/-- The master arithmetic of `buildSAT_cost_le`, over abstract cost atoms: the
+peeled seq spine is `≤ satK · (satOmega n + 1)⁴`. -/
+private theorem buildSAT_arith (n L KE cbl c1 c2 c3 clp : Nat) (hLn : L ≤ 4 * n)
+    (hsatK : satK = tokFK + 12 * KE + 100)
+    (hbl : cbl ≤ 1 + L * 5 + L * L) (h1 : c1 ≤ KE * (L + 1))
+    (h2 : c2 ≤ KE * (2 * L + 4)) (h3 : c3 ≤ KE * (3 * L + 7))
+    (hlp : clp ≤ 1 + L * (tokFK * (1600 * (n + 1) ^ 2 + L + 3) ^ 3) + L * L) :
+    1 + 1 + (1 + cbl + (1 + (L + 1) + (1 + 1 + (1 + 1 + (1 + 1 + (1 + (L + 1)
+      + (1 + c1 + (1 + c2 + (1 + c3 + (1 + 3 + clp)))))))))) ≤ satBound n := by
+  have hsq : (n + 1) ^ 2 = n * n + 2 * n + 1 := by ring
+  set Q := satOmega n + 1 with hQ
+  have hQval : Q = 1700 * (n + 1) ^ 2 + 1 := by rw [hQ]; rfl
+  have hLQ : L + 1 ≤ Q := by rw [hQval, hsq]; omega
+  -- the loop term: L·(tokFK·(E+L+3)³) ≤ tokFK·Q⁴
+  have hEL3 : 1600 * (n + 1) ^ 2 + L + 3 ≤ Q := by rw [hQval, hsq]; omega
+  have hcube : (1600 * (n + 1) ^ 2 + L + 3) ^ 3 ≤ Q ^ 3 := Nat.pow_le_pow_left hEL3 3
+  have hmain : L * (tokFK * (1600 * (n + 1) ^ 2 + L + 3) ^ 3)
+      ≤ tokFK * (Q * (Q * (Q * Q))) := by
+    calc L * (tokFK * (1600 * (n + 1) ^ 2 + L + 3) ^ 3)
+        ≤ Q * (tokFK * Q ^ 3) :=
+          Nat.mul_le_mul (Nat.le_of_succ_le hLQ) (Nat.mul_le_mul_left _ hcube)
+      _ = tokFK * (Q * (Q * (Q * Q))) := by ring
+  have hQ1 : 1 ≤ Q := by omega
+  have hQ4 : Q ≤ Q * (Q * (Q * Q)) :=
+    Nat.le_mul_of_pos_right _ (Nat.mul_pos hQ1 (Nat.mul_pos hQ1 hQ1))
+  -- the emitter junk: KE·(L+1) + KE·(2L+4) + KE·(3L+7) ≤ 12·KE·Q⁴
+  have hemit : KE * (L + 1) + KE * (2 * L + 4) + KE * (3 * L + 7)
+      ≤ 12 * KE * (Q * (Q * (Q * Q))) := by
+    have h1 : (L + 1) + (2 * L + 4) + (3 * L + 7) ≤ 12 * Q := by omega
+    calc KE * (L + 1) + KE * (2 * L + 4) + KE * (3 * L + 7)
+        = KE * ((L + 1) + (2 * L + 4) + (3 * L + 7)) := by ring
+      _ ≤ KE * (12 * Q) := Nat.mul_le_mul_left _ h1
+      _ ≤ KE * (12 * (Q * (Q * (Q * Q)))) :=
+          Nat.mul_le_mul_left _ (Nat.mul_le_mul_left _ hQ4)
+      _ = 12 * KE * (Q * (Q * (Q * Q))) := by ring
+  -- the remaining polynomial junk: 2L² + 10L + 25 ≤ 100·Q⁴
+  have hjunk : 2 * (L * L) + 10 * L + 25 ≤ 100 * (Q * (Q * (Q * Q))) := by
+    have hLQ' : L ≤ Q := Nat.le_of_succ_le hLQ
+    have h2 : L * L ≤ Q * Q := Nat.mul_le_mul hLQ' hLQ'
+    have hQQ4 : Q * Q ≤ Q * (Q * (Q * Q)) := by
+      calc Q * Q = (Q * Q) * 1 := by ring
+        _ ≤ (Q * Q) * (Q * Q) := Nat.mul_le_mul_left _ (Nat.mul_pos hQ1 hQ1)
+        _ = Q * (Q * (Q * Q)) := by ring
+    omega
+  have hsb : satBound n = tokFK * (Q * (Q * (Q * Q)))
+      + 12 * KE * (Q * (Q * (Q * Q))) + 100 * (Q * (Q * (Q * Q))) := by
+    rw [show satBound n = satK * (Q * (Q * (Q * Q))) from rfl, hsatK]
+    ring
+  rw [hsb]
+  generalize Q * (Q * (Q * Q)) = Q4 at hmain hemit hjunk
+  generalize L * (tokFK * (1600 * (n + 1) ^ 2 + L + 3) ^ 3) = W at hmain hlp
+  omega
 
 set_option maxHeartbeats 1000000 in
 /-- **The witness's `cost_le`**: `buildSAT` runs within `satBound` on every
@@ -1699,83 +1778,11 @@ theorem buildSAT_cost_le (f : formula) :
     e_clearB, ← hcB, e_copySCAN, e_clearK, e_clearTAL, e_clearCNF, e_copyVA,
     e_lit1, e_lit2, e_lit3, e_end]
   rw [hc_clearB, hc_copySCAN, hc_clearK, hc_clearTAL, hc_clearCNF, hc_copyVA, hc_end]
-  -- the master arithmetic: everything ≤ satK · (satOmega n + 1)⁴
-  set Q := satOmega n + 1 with hQ
-  have hsatK : satK = tokFK + 12 * (emitLit true VA).flatK + 100 := rfl
-  have hQval : Q = 1700 * (n + 1) ^ 2 + 1 := by rw [hQ]; rfl
-  have hLQ : L + 1 ≤ Q := by rw [hQval, hsq]; omega
-  -- the loop term: L·(tokFK·(E+L+3)³) ≤ tokFK·Q⁴
-  have hEL3 : 1600 * (n + 1) ^ 2 + L + 3 ≤ Q := by rw [hQval, hsq]; omega
-  have hcube : (1600 * (n + 1) ^ 2 + L + 3) ^ 3 ≤ Q ^ 3 := Nat.pow_le_pow_left hEL3 3
-  have hmain : L * (tokFK * (1600 * (n + 1) ^ 2 + L + 3) ^ 3)
-      ≤ tokFK * (Q * (Q * (Q * Q))) := by
-    calc L * (tokFK * (1600 * (n + 1) ^ 2 + L + 3) ^ 3)
-        ≤ Q * (tokFK * Q ^ 3) :=
-          Nat.mul_le_mul (by omega) (Nat.mul_le_mul_left _ hcube)
-      _ = tokFK * (Q * (Q * (Q * Q))) := by ring
-  -- the emitter junk: KE·(L+1) + KE·(2L+4) + KE·(3L+7) ≤ 12·KE·Q⁴
-  have hemit : (emitLit true VA).flatK * (L + 1) + (emitLit true VA).flatK * (2 * L + 4)
-      + (emitLit true VA).flatK * (3 * L + 7)
-      ≤ 12 * (emitLit true VA).flatK * (Q * (Q * (Q * Q))) := by
-    have h1 : (L + 1) + (2 * L + 4) + (3 * L + 7) ≤ 12 * Q := by
-      have : L + 1 ≤ Q := hLQ
-      omega
-    have hQ4 : Q ≤ Q * (Q * (Q * Q)) := by
-      have h1Q : 1 ≤ Q * (Q * Q) :=
-        Nat.mul_pos (by omega) (Nat.mul_pos (by omega) (by omega))
-      calc Q = Q * 1 := by ring
-        _ ≤ Q * (Q * (Q * Q)) := Nat.mul_le_mul_left _ (by
-            calc 1 ≤ Q * (Q * Q) := h1Q
-              _ ≤ Q * (Q * Q) := le_refl _)
-    calc (emitLit true VA).flatK * (L + 1) + (emitLit true VA).flatK * (2 * L + 4)
-        + (emitLit true VA).flatK * (3 * L + 7)
-        = (emitLit true VA).flatK * ((L + 1) + (2 * L + 4) + (3 * L + 7)) := by ring
-      _ ≤ (emitLit true VA).flatK * (12 * Q) := Nat.mul_le_mul_left _ h1
-      _ ≤ (emitLit true VA).flatK * (12 * (Q * (Q * (Q * Q)))) :=
-          Nat.mul_le_mul_left _ (Nat.mul_le_mul_left _ hQ4)
-      _ = 12 * (emitLit true VA).flatK * (Q * (Q * (Q * Q))) := by ring
-  -- the remaining polynomial junk: 2L² + 10L + 25 ≤ 100·Q⁴
-  have hjunk : 2 * (L * L) + 10 * L + 25 ≤ 100 * (Q * (Q * (Q * Q))) := by
-    have hQ1 : 1 ≤ Q := by rw [hQval]; omega
-    have hLQ' : L ≤ Q := by omega
-    have h2 : L * L ≤ Q * Q := Nat.mul_le_mul hLQ' hLQ'
-    have hQQ4 : Q * Q ≤ Q * (Q * (Q * Q)) := by
-      calc Q * Q = (Q * Q) * 1 := by ring
-        _ ≤ (Q * Q) * (Q * Q) := Nat.mul_le_mul_left _ (Nat.mul_pos (by omega) (by omega))
-        _ = Q * (Q * (Q * Q)) := by ring
-    have hQge : Q ≤ Q * (Q * (Q * Q)) := by
-      calc Q = Q * 1 := by ring
-        _ ≤ Q * (Q * (Q * Q)) := Nat.mul_le_mul_left _
-            (Nat.mul_pos (by omega) (Nat.mul_pos (by omega) (by omega)))
-    omega
-  -- assemble
+  -- the master arithmetic: everything ≤ satK · (satOmega n + 1)⁴ (`buildSAT_arith`)
   show 1 + 1 + (1 + _ + (1 + (L + 1) + (1 + 1 + (1 + 1 + (1 + 1 + (1 + (L + 1)
       + (1 + _ + (1 + _ + (1 + _ + (1 + 3 + _)))))))))) ≤ satBound n
-  have hsb : satBound n = tokFK * (Q * (Q * (Q * Q)))
-      + 12 * (emitLit true VA).flatK * (Q * (Q * (Q * Q)))
-      + 100 * (Q * (Q * (Q * Q))) := by
-    rw [show satBound n = satK * (Q * (Q * (Q * Q))) from rfl, hsatK]
-    ring
-  rw [hsb]
-  set KE := (emitLit true VA).flatK with hKE
-  clear_value KE
-  set Q4 := Q * (Q * (Q * Q)) with hQ4d
-  clear_value Q4
-  set P := tokFK * Q4 with hP
-  clear_value P
-  set c1 := (emitLit true VA).cost c_va with hc1v
-  clear_value c1
-  set c2 := (emitLit true VA).cost e1 with hc2v
-  clear_value c2
-  set c3 := (emitLit true VA).cost e2 with hc3v
-  clear_value c3
-  set cbl := (Cmd.forBnd IDX0 SERF (Cmd.op (Op.appendOne B))).cost c_a with hcblv
-  clear_value cbl
-  set clp := (Cmd.forBnd IDX1 SERF tokenBody).cost e4 with hclpv
-  clear_value clp
-  set W := L * (tokFK * (1600 * (n + 1) ^ 2 + L + 3) ^ 3) with hW
-  clear_value W
-  omega
+  exact buildSAT_arith n L (emitLit true VA).flatK _ _ _ _ _ hLn rfl hc_Bloop hc_lit1 hc_lit2
+    hc_lit3 hloop
 
 /-! ## The free witness and the headline `⪯p` -/
 

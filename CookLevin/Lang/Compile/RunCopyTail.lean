@@ -651,6 +651,47 @@ private theorem Compile.copyRet1_encTape_run (q : State) (src : Var) (hsrc : src
     exact ⟨ClearGadget.ne_of_not_halting
       (show Compile.copyRet1TM.halt[3]? = some true from rfl) hh, hh⟩
 
+/-- Residue-region cells of `T ++ res` (index `≥ |T|`) are `< 4` and `≠ 3`. -/
+private theorem Compile.append_res_cell (T res : List Nat) (hres : Compile.ValidResidue res)
+    (i : Nat) (hi : T.length ≤ i) (hlt : i < (T ++ res).length) :
+    (T ++ res).get ⟨i, hlt⟩ < 4 ∧ (T ++ res).get ⟨i, hlt⟩ ≠ 3 := by
+  have hidx : i - T.length < res.length := by rw [List.length_append] at hlt; omega
+  have hkey : (T ++ res)[i]? = res[i - T.length]? := List.getElem?_append_right hi
+  have hget : (T ++ res).get ⟨i, hlt⟩ = res[i - T.length]'hidx := by
+    rw [List.get_eq_getElem]
+    exact Option.some_inj.mp ((List.getElem?_eq_getElem hlt).symm.trans
+      (hkey.trans (List.getElem?_eq_getElem hidx)))
+  rw [hget]
+  have h := hres _ (List.getElem_mem hidx)
+  exact ⟨h.1, h.2⟩
+
+private theorem Compile.bit_succ_lt_four {b : Nat} (hb : b ≤ 1) : b + 1 < 4 := by omega
+
+private theorem Compile.lt_add_one_add_of_le {i E R : Nat} (h : i ≤ E + R) :
+    i < E + 1 + R := by omega
+
+private theorem Compile.copyPipe_len_cancel {x y E : Nat} (h : x + y = E + (y + 1)) :
+    x = E + 1 := by omega
+
+private theorem Compile.copyPipe_term_idx {a E E' : Nat} (h1 : E' = a + 2) (h2 : E' = E + 1) :
+    a + 1 = E := by omega
+
+private theorem Compile.copyPipe_mark_le {P E E' x : Nat} (h1 : E' = P + (x + 3))
+    (h2 : E' = E + 1) : P + 2 ≤ E := by omega
+
+private theorem Compile.copyPipe_succ_lt {i E E' P : Nat} (hE : E' = E + 1) (hP : P + 2 ≤ E)
+    (h : i ≤ E - 1) : i + 1 < E' := by omega
+
+private theorem Compile.copyPipe_head_eq {P E : Nat} (h : P + 2 ≤ E) :
+    E - 1 = P + (E - 1 - P) := by omega
+
+private theorem Compile.sub_one_lt_add_one_add (E R : Nat) : E - 1 < E + 1 + R := by omega
+
+private theorem Compile.copyPipe_budget {P E R t n : Nat} (hP : P ≤ E)
+    (ht : t ≤ 2 * (E + R) + 3) (hn : n ≤ E) :
+    1 + 1 + P + 1 + t + 1 + (R + 1) + 1 + 1 + 1 + (n + 1) + 1 + 1 ≤ 5 * (E + 1 + R) + 16 := by
+  omega
+
 /-- **One cursor-copy pipeline pass (`copyPipeTM b dst`).** Started with the head
 ON the freshly written mark (src's cell `i = |w₁|`, the only interior `3`), the
 pipeline rewinds to the sentinel, appends `b` to `dst` (`appendAtTM (b+1)`),
@@ -746,15 +787,14 @@ theorem Compile.copyPipe_run (b : Nat) (hb : b ≤ 1) (q : State) (dst src : Var
       = (Compile.encodeTape (State.set q src (w₁ ++ 2 :: w₂))).length + 1 := by
     have hbal := Compile.encodeTape_set_length (State.set q src (w₁ ++ 2 :: w₂)) dst
       (State.get q dst ++ [b]) hdstM
-    rw [hgetM, hqM'_eq] at hbal
-    have hlb : (State.get q dst ++ [b]).length = (State.get q dst).length + 1 := by simp
-    omega
+    rw [hgetM, hqM'_eq, List.length_append, List.length_singleton] at hbal
+    exact Compile.copyPipe_len_cancel hbal
   -- ### stages 1–2: `copyRet1TM` (run + traj proved above)
   have hRet1 := Compile.copyRet1_encTape_run q src hsrc hbit w₁ w₂ b hsplit res hres
   -- ### stage 3: `appendAtTM (b+1) dst` on the marked tape
   obtain ⟨t₃, happ_run, happ_traj, happ_le⟩ :=
-    Compile.appendAt_encTape_run b (by omega) (State.set q src (w₁ ++ 2 :: w₂)) dst hdstM
-      hqM_le2 res hres
+    Compile.appendAt_encTape_run b (Nat.le_succ_of_le hb) (State.set q src (w₁ ++ 2 :: w₂))
+      dst hdstM hqM_le2 res hres
   rw [hgetM, hqM'_eq] at happ_run
   -- ### level A2: copyRet1TM ⨾ appendAtTM
   have hsymA2 : ∀ v, currentTapeSymbol
@@ -774,22 +814,22 @@ theorem Compile.copyPipe_run (b : Nat) (hb : b ≤ 1) (q : State) (dst src : Var
                    src (w₁ ++ 2 :: w₂)) ++ res)] } := by
     rw [AppendGadget.appendAtTM_start]; exact happ_run
   have hA2run := composeFlatTM_run Compile.copyRet1TM_valid
-    (AppendGadget.appendAtTM_valid (b + 1) (by omega) dst)
-    (by show (3 : Nat) < Compile.copyRet1TM.states; rw [Compile.copyRet1TM_states]; omega)
+    (AppendGadget.appendAtTM_valid (b + 1) (Compile.bit_succ_lt_four hb) dst)
+    (by show (3 : Nat) < Compile.copyRet1TM.states; rw [Compile.copyRet1TM_states]; decide)
     { state_idx := 0,
       tapes := [([], 1 + (Compile.encodeRegs (q.take src)).length + w₁.length,
                  Compile.encodeTape (State.set q src (w₁ ++ 2 :: w₂)) ++ res)] }
-    (by show (0 : Nat) < Compile.copyRet1TM.states; rw [Compile.copyRet1TM_states]; omega)
+    (by show (0 : Nat) < Compile.copyRet1TM.states; rw [Compile.copyRet1TM_states]; decide)
     [] 0 (Compile.encodeTape (State.set q src (w₁ ++ 2 :: w₂)) ++ res)
     hsymA2 hRet1.1 hRet1.2 happ_run'
     (Compile.haltingStateReached_of_halt (AppendGadget.appendAtTM_exit_is_halt (b + 1) dst))
   have hA2traj := composeFlatTM_no_early_halt Compile.copyRet1TM_valid
-    (AppendGadget.appendAtTM_valid (b + 1) (by omega) dst)
-    (by show (3 : Nat) < Compile.copyRet1TM.states; rw [Compile.copyRet1TM_states]; omega)
+    (AppendGadget.appendAtTM_valid (b + 1) (Compile.bit_succ_lt_four hb) dst)
+    (by show (3 : Nat) < Compile.copyRet1TM.states; rw [Compile.copyRet1TM_states]; decide)
     { state_idx := 0,
       tapes := [([], 1 + (Compile.encodeRegs (q.take src)).length + w₁.length,
                  Compile.encodeTape (State.set q src (w₁ ++ 2 :: w₂)) ++ res)] }
-    (by show (0 : Nat) < Compile.copyRet1TM.states; rw [Compile.copyRet1TM_states]; omega)
+    (by show (0 : Nat) < Compile.copyRet1TM.states; rw [Compile.copyRet1TM_states]; decide)
     [] 0 (Compile.encodeTape (State.set q src (w₁ ++ 2 :: w₂)) ++ res)
     hsymA2 hRet1.1 hRet1.2
     (fun k hk ck hck => (happ_traj k hk ck
@@ -799,14 +839,14 @@ theorem Compile.copyPipe_run (b : Nat) (hb : b ≤ 1) (q : State) (dst src : Var
       = composeFlatTM Compile.copyRet1TM (AppendGadget.appendAtTM (b + 1) dst) 3 := rfl
   have hexA2 : AppendGadget.appendAtTM_exit dst + Compile.copyRet1TM.states
       = 13 + 3 * dst := by
-    rw [Compile.appendAtTM_exit_eq, Compile.copyRet1TM_states]; omega
+    rw [Compile.appendAtTM_exit_eq, Compile.copyRet1TM_states]; exact Nat.add_right_comm _ _ _
   rw [hexA2] at hA2run
   have hA2halt : (Compile.copyPipeA2TM b dst).halt[13 + 3 * dst]? = some true := by
     have h := Compile.composeFlatTM_halt_intro Compile.copyRet1TM
       (AppendGadget.appendAtTM (b + 1) dst) (AppendGadget.appendAtTM_exit dst) 3
       (AppendGadget.appendAtTM_exit_is_halt (b + 1) dst)
     rw [Compile.copyRet1TM_states, Compile.appendAtTM_exit_eq] at h
-    rw [hMA2, show (13 + 3 * dst : Nat) = 5 + (8 + 3 * dst) from by omega]
+    rw [hMA2, show (13 + 3 * dst : Nat) = 5 + (8 + 3 * dst) from Nat.add_assoc 5 8 _]
     exact h
   -- ### stage 4: scan left from the tape end to the trailing terminator
   have hterm? : (Compile.encodeTape (State.set (State.set q dst (State.get q dst ++ [b]))
@@ -819,9 +859,7 @@ theorem Compile.copyPipe_run (b : Nat) (hb : b ≤ 1) (q : State) (dst src : Var
         = (Compile.encodeRegs (State.set (State.set q dst (State.get q dst ++ [b]))
           src (w₁ ++ 2 :: w₂))).length + 2 := by
       rw [Compile.encodeTape]; simp
-    rw [show (Compile.encodeRegs (State.set (State.set q dst (State.get q dst ++ [b]))
-          src (w₁ ++ 2 :: w₂))).length + 1
-        = (Compile.encodeTape (State.set q src (w₁ ++ 2 :: w₂))).length from by omega] at h
+    rw [Compile.copyPipe_term_idx hlen2 hE1'] at h
     exact h
   obtain ⟨hterm_lt, hterm_get⟩ := List.getElem?_eq_some_iff.mp hterm?
   have hterm_get' : (Compile.encodeTape (State.set (State.set q dst (State.get q dst ++ [b]))
@@ -831,7 +869,7 @@ theorem Compile.copyPipe_run (b : Nat) (hb : b ≤ 1) (q : State) (dst src : Var
   have hTmOut_len : (Compile.encodeTape (State.set (State.set q dst
         (State.get q dst ++ [b])) src (w₁ ++ 2 :: w₂)) ++ res).length
       = (Compile.encodeTape (State.set q src (w₁ ++ 2 :: w₂))).length + 1 + res.length := by
-    rw [List.length_append]; omega
+    rw [List.length_append, hE1']
   have hcells4 : ∀ i, (Compile.encodeTape (State.set q src (w₁ ++ 2 :: w₂))).length < i →
       i ≤ (Compile.encodeTape (State.set q src (w₁ ++ 2 :: w₂))).length + res.length →
       ∃ (h : i < (Compile.encodeTape (State.set (State.set q dst (State.get q dst ++ [b]))
@@ -842,42 +880,23 @@ theorem Compile.copyPipe_run (b : Nat) (hb : b ≤ 1) (q : State) (dst src : Var
           src (w₁ ++ 2 :: w₂)) ++ res).get ⟨i, h⟩ ≠ 3 := by
     intro i hgt hle
     have hlt : i < (Compile.encodeTape (State.set (State.set q dst (State.get q dst ++ [b]))
-        src (w₁ ++ 2 :: w₂)) ++ res).length := by omega
-    refine ⟨hlt, ?_⟩
-    have hres_idx : i - (Compile.encodeTape (State.set (State.set q dst
-        (State.get q dst ++ [b])) src (w₁ ++ 2 :: w₂))).length < res.length := by omega
-    have hkey : (Compile.encodeTape (State.set (State.set q dst (State.get q dst ++ [b]))
-          src (w₁ ++ 2 :: w₂)) ++ res)[i]?
-        = res[i - (Compile.encodeTape (State.set (State.set q dst (State.get q dst ++ [b]))
-            src (w₁ ++ 2 :: w₂))).length]? :=
-      List.getElem?_append_right (by omega)
-    have hmem := List.getElem_mem hres_idx
-    have hval := hres _ hmem
-    have hgetv : (Compile.encodeTape (State.set (State.set q dst (State.get q dst ++ [b]))
-          src (w₁ ++ 2 :: w₂)) ++ res).get ⟨i, hlt⟩
-        = res[i - (Compile.encodeTape (State.set (State.set q dst (State.get q dst ++ [b]))
-            src (w₁ ++ 2 :: w₂))).length]'hres_idx := by
-      rw [List.get_eq_getElem]
-      exact Option.some_inj.mp ((List.getElem?_eq_getElem hlt).symm.trans
-        (hkey.trans (List.getElem?_eq_getElem hres_idx)))
-    rw [hgetv]
-    refine ⟨hval.1, ?_⟩
-    have h2 := hval.2
-    simpa [Compile.endMark] using h2
+        src (w₁ ++ 2 :: w₂)) ++ res).length := by
+      rw [hTmOut_len]; exact Compile.lt_add_one_add_of_le hle
+    exact ⟨hlt, Compile.append_res_cell _ res hres i (by rw [hE1']; exact hgt) hlt⟩
   have h4_run := ScanLeft.scanLeftToMark_run 4 3 []
     (Compile.encodeTape (State.set (State.set q dst (State.get q dst ++ [b]))
       src (w₁ ++ 2 :: w₂)) ++ res)
     (Compile.encodeTape (State.set q src (w₁ ++ 2 :: w₂))).length hterm_lt hterm_get'
     res.length
     ((Compile.encodeTape (State.set q src (w₁ ++ 2 :: w₂))).length + res.length)
-    rfl (by omega) hcells4
+    rfl (by rw [hTmOut_len]; exact Compile.lt_add_one_add_of_le (Nat.le_refl _)) hcells4
   have h4_traj := ScanLeft.scanLeftToMark_no_early_halt 4 3 []
     (Compile.encodeTape (State.set (State.set q dst (State.get q dst ++ [b]))
       src (w₁ ++ 2 :: w₂)) ++ res)
     (Compile.encodeTape (State.set q src (w₁ ++ 2 :: w₂))).length hterm_lt hterm_get'
     res.length
     ((Compile.encodeTape (State.set q src (w₁ ++ 2 :: w₂))).length + res.length)
-    rfl (by omega) hcells4
+    rfl (by rw [hTmOut_len]; exact Compile.lt_add_one_add_of_le (Nat.le_refl _)) hcells4
   -- ### level A3: copyPipeA2TM ⨾ scanLeftUntilTM
   have hsymA3 : ∀ v, currentTapeSymbol
       ([], (Compile.encodeTape (State.set q src (w₁ ++ 2 :: w₂))).length + res.length,
@@ -891,12 +910,13 @@ theorem Compile.copyPipe_run (b : Nat) (hb : b ≤ 1) (q : State) (dst src : Var
   have hA3run := composeFlatTM_run (Compile.copyPipeA2TM_valid b dst hb)
     (ScanLeft.scanLeftUntilTM_valid 4 3 (by decide))
     (by show (13 + 3 * dst : Nat) < (Compile.copyPipeA2TM b dst).states
-        rw [Compile.copyPipeA2TM_states]; omega)
+        rw [Compile.copyPipeA2TM_states]; exact Nat.add_lt_add_right (by decide) _)
     { state_idx := 0,
       tapes := [([], 1 + (Compile.encodeRegs (q.take src)).length + w₁.length,
                  Compile.encodeTape (State.set q src (w₁ ++ 2 :: w₂)) ++ res)] }
     (by show (0 : Nat) < (Compile.copyPipeA2TM b dst).states
-        rw [Compile.copyPipeA2TM_states]; omega)
+        rw [Compile.copyPipeA2TM_states]
+        exact Nat.lt_of_lt_of_le (by decide) (Nat.le_add_right _ _))
     [] ((Compile.encodeTape (State.set q src (w₁ ++ 2 :: w₂))).length + res.length)
     (Compile.encodeTape (State.set (State.set q dst (State.get q dst ++ [b]))
       src (w₁ ++ 2 :: w₂)) ++ res)
@@ -908,12 +928,13 @@ theorem Compile.copyPipe_run (b : Nat) (hb : b ≤ 1) (q : State) (dst src : Var
   have hA3traj := composeFlatTM_no_early_halt (Compile.copyPipeA2TM_valid b dst hb)
     (ScanLeft.scanLeftUntilTM_valid 4 3 (by decide))
     (by show (13 + 3 * dst : Nat) < (Compile.copyPipeA2TM b dst).states
-        rw [Compile.copyPipeA2TM_states]; omega)
+        rw [Compile.copyPipeA2TM_states]; exact Nat.add_lt_add_right (by decide) _)
     { state_idx := 0,
       tapes := [([], 1 + (Compile.encodeRegs (q.take src)).length + w₁.length,
                  Compile.encodeTape (State.set q src (w₁ ++ 2 :: w₂)) ++ res)] }
     (by show (0 : Nat) < (Compile.copyPipeA2TM b dst).states
-        rw [Compile.copyPipeA2TM_states]; omega)
+        rw [Compile.copyPipeA2TM_states]
+        exact Nat.lt_of_lt_of_le (by decide) (Nat.le_add_right _ _))
     [] ((Compile.encodeTape (State.set q src (w₁ ++ 2 :: w₂))).length + res.length)
     (Compile.encodeTape (State.set (State.set q dst (State.get q dst ++ [b]))
       src (w₁ ++ 2 :: w₂)) ++ res)
@@ -926,13 +947,14 @@ theorem Compile.copyPipe_run (b : Nat) (hb : b ≤ 1) (q : State) (dst src : Var
       = composeFlatTM (Compile.copyPipeA2TM b dst) (ScanLeft.scanLeftUntilTM 4 3)
           (13 + 3 * dst) := rfl
   have hexA3 : 1 + (Compile.copyPipeA2TM b dst).states = 15 + 3 * dst := by
-    rw [Compile.copyPipeA2TM_states]; omega
+    rw [Compile.copyPipeA2TM_states]; exact (Nat.add_assoc 1 14 _).symm
   rw [hexA3] at hA3run
   have hA3halt : (Compile.copyPipeA3TM b dst).halt[15 + 3 * dst]? = some true := by
     have h := Compile.composeFlatTM_halt_intro (Compile.copyPipeA2TM b dst)
       (ScanLeft.scanLeftUntilTM 4 3) 1 (13 + 3 * dst) rfl
     rw [Compile.copyPipeA2TM_states] at h
-    rw [hMA3, show (15 + 3 * dst : Nat) = 14 + 3 * dst + 1 from by omega]
+    rw [hMA3, show (15 + 3 * dst : Nat) = 14 + 3 * dst + 1 from
+      (Nat.add_right_comm 14 (3 * dst) 1).symm]
     exact h
   -- ### stage 5: one step left off the terminator
   have h5_run := ScanLeft.stepLeftTM_run 4 []
@@ -957,12 +979,13 @@ theorem Compile.copyPipe_run (b : Nat) (hb : b ≤ 1) (q : State) (dst src : Var
   have hA4run := composeFlatTM_run (Compile.copyPipeA3TM_valid b dst hb)
     (ScanLeft.stepLeftTM_valid 4)
     (by show (15 + 3 * dst : Nat) < (Compile.copyPipeA3TM b dst).states
-        rw [Compile.copyPipeA3TM_states]; omega)
+        rw [Compile.copyPipeA3TM_states]; exact Nat.add_lt_add_right (by decide) _)
     { state_idx := 0,
       tapes := [([], 1 + (Compile.encodeRegs (q.take src)).length + w₁.length,
                  Compile.encodeTape (State.set q src (w₁ ++ 2 :: w₂)) ++ res)] }
     (by show (0 : Nat) < (Compile.copyPipeA3TM b dst).states
-        rw [Compile.copyPipeA3TM_states]; omega)
+        rw [Compile.copyPipeA3TM_states]
+        exact Nat.lt_of_lt_of_le (by decide) (Nat.le_add_right _ _))
     [] (Compile.encodeTape (State.set q src (w₁ ++ 2 :: w₂))).length
     (Compile.encodeTape (State.set (State.set q dst (State.get q dst ++ [b]))
       src (w₁ ++ 2 :: w₂)) ++ res)
@@ -974,12 +997,13 @@ theorem Compile.copyPipe_run (b : Nat) (hb : b ≤ 1) (q : State) (dst src : Var
   have hA4traj := composeFlatTM_no_early_halt (Compile.copyPipeA3TM_valid b dst hb)
     (ScanLeft.stepLeftTM_valid 4)
     (by show (15 + 3 * dst : Nat) < (Compile.copyPipeA3TM b dst).states
-        rw [Compile.copyPipeA3TM_states]; omega)
+        rw [Compile.copyPipeA3TM_states]; exact Nat.add_lt_add_right (by decide) _)
     { state_idx := 0,
       tapes := [([], 1 + (Compile.encodeRegs (q.take src)).length + w₁.length,
                  Compile.encodeTape (State.set q src (w₁ ++ 2 :: w₂)) ++ res)] }
     (by show (0 : Nat) < (Compile.copyPipeA3TM b dst).states
-        rw [Compile.copyPipeA3TM_states]; omega)
+        rw [Compile.copyPipeA3TM_states]
+        exact Nat.lt_of_lt_of_le (by decide) (Nat.le_add_right _ _))
     [] (Compile.encodeTape (State.set q src (w₁ ++ 2 :: w₂))).length
     (Compile.encodeTape (State.set (State.set q dst (State.get q dst ++ [b]))
       src (w₁ ++ 2 :: w₂)) ++ res)
@@ -992,21 +1016,22 @@ theorem Compile.copyPipe_run (b : Nat) (hb : b ≤ 1) (q : State) (dst src : Var
       = composeFlatTM (Compile.copyPipeA3TM b dst) (ScanLeft.stepLeftTM 4)
           (15 + 3 * dst) := rfl
   have hexA4 : 1 + (Compile.copyPipeA3TM b dst).states = 18 + 3 * dst := by
-    rw [Compile.copyPipeA3TM_states]; omega
+    rw [Compile.copyPipeA3TM_states]; exact (Nat.add_assoc 1 17 _).symm
   rw [hexA4] at hA4run
   have hA4halt : (Compile.copyPipeA4TM b dst).halt[18 + 3 * dst]? = some true := by
     have h := Compile.composeFlatTM_halt_intro (Compile.copyPipeA3TM b dst)
       (ScanLeft.stepLeftTM 4) 1 (15 + 3 * dst) rfl
     rw [Compile.copyPipeA3TM_states] at h
-    rw [hMA4, show (18 + 3 * dst : Nat) = 17 + 3 * dst + 1 from by omega]
+    rw [hMA4, show (18 + 3 * dst : Nat) = 17 + 3 * dst + 1 from
+      (Nat.add_right_comm 17 (3 * dst) 1).symm]
     exact h
   -- ### stage 6: scan left to the mark (the only interior `3` of the q'-marked tape)
   obtain ⟨hP'lt, hP'get⟩ := Compile.markedTape_get_mark
     (State.set q dst (State.get q dst ++ [b])) src hsrc' w₁ w₂ 2 res
   have hP'3 : 1 + (Compile.encodeRegs ((State.set q dst
         (State.get q dst ++ [b])).take src)).length + w₁.length + 2
-      ≤ (Compile.encodeTape (State.set q src (w₁ ++ 2 :: w₂))).length := by
-    omega
+      ≤ (Compile.encodeTape (State.set q src (w₁ ++ 2 :: w₂))).length :=
+    Compile.copyPipe_mark_le hLM' hE1'
   have hcells6 : ∀ i,
       1 + (Compile.encodeRegs ((State.set q dst
         (State.get q dst ++ [b])).take src)).length + w₁.length < i →
@@ -1019,7 +1044,8 @@ theorem Compile.copyPipe_run (b : Nat) (hb : b ≤ 1) (q : State) (dst src : Var
           src (w₁ ++ 2 :: w₂)) ++ res).get ⟨i, h⟩ ≠ 3 := by
     intro i hgt hle
     exact Compile.markedTape_interior_cell (State.set q dst (State.get q dst ++ [b]))
-      src hsrc' hbit' w₁ w₂ b hsplit' 2 res i (by omega) (by omega) (by omega)
+      src hsrc' hbit' w₁ w₂ b hsplit' 2 res i (Nat.lt_of_le_of_lt (Nat.zero_le _) hgt)
+      (Nat.ne_of_lt hgt).symm (Compile.copyPipe_succ_lt hE1' hP'3 hle)
   have hP'get3 : (Compile.encodeTape (State.set (State.set q dst (State.get q dst ++ [b]))
         src (w₁ ++ 2 :: w₂)) ++ res).get
       ⟨1 + (Compile.encodeRegs ((State.set q dst
@@ -1034,7 +1060,9 @@ theorem Compile.copyPipe_run (b : Nat) (hb : b ≤ 1) (q : State) (dst src : Var
       - (1 + (Compile.encodeRegs ((State.set q dst
           (State.get q dst ++ [b])).take src)).length + w₁.length))
     ((Compile.encodeTape (State.set q src (w₁ ++ 2 :: w₂))).length - 1)
-    (by omega) (by omega) (fun i hgt hle => hcells6 i hgt hle)
+    (Compile.copyPipe_head_eq hP'3)
+    (by rw [hTmOut_len]; exact Compile.sub_one_lt_add_one_add _ _)
+    (fun i hgt hle => hcells6 i hgt hle)
   have h6_traj := ScanLeft.scanLeftToMark_no_early_halt 4 3 []
     (Compile.encodeTape (State.set (State.set q dst (State.get q dst ++ [b]))
       src (w₁ ++ 2 :: w₂)) ++ res)
@@ -1044,7 +1072,9 @@ theorem Compile.copyPipe_run (b : Nat) (hb : b ≤ 1) (q : State) (dst src : Var
       - (1 + (Compile.encodeRegs ((State.set q dst
           (State.get q dst ++ [b])).take src)).length + w₁.length))
     ((Compile.encodeTape (State.set q src (w₁ ++ 2 :: w₂))).length - 1)
-    (by omega) (by omega) (fun i hgt hle => hcells6 i hgt hle)
+    (Compile.copyPipe_head_eq hP'3)
+    (by rw [hTmOut_len]; exact Compile.sub_one_lt_add_one_add _ _)
+    (fun i hgt hle => hcells6 i hgt hle)
   -- ### level A5: copyPipeA4TM ⨾ scanLeftUntilTM
   have hsymA5 : ∀ v, currentTapeSymbol
       ([], (Compile.encodeTape (State.set q src (w₁ ++ 2 :: w₂))).length - 1,
@@ -1058,12 +1088,13 @@ theorem Compile.copyPipe_run (b : Nat) (hb : b ≤ 1) (q : State) (dst src : Var
   have hA5run := composeFlatTM_run (Compile.copyPipeA4TM_valid b dst hb)
     (ScanLeft.scanLeftUntilTM_valid 4 3 (by decide))
     (by show (18 + 3 * dst : Nat) < (Compile.copyPipeA4TM b dst).states
-        rw [Compile.copyPipeA4TM_states]; omega)
+        rw [Compile.copyPipeA4TM_states]; exact Nat.add_lt_add_right (by decide) _)
     { state_idx := 0,
       tapes := [([], 1 + (Compile.encodeRegs (q.take src)).length + w₁.length,
                  Compile.encodeTape (State.set q src (w₁ ++ 2 :: w₂)) ++ res)] }
     (by show (0 : Nat) < (Compile.copyPipeA4TM b dst).states
-        rw [Compile.copyPipeA4TM_states]; omega)
+        rw [Compile.copyPipeA4TM_states]
+        exact Nat.lt_of_lt_of_le (by decide) (Nat.le_add_right _ _))
     [] ((Compile.encodeTape (State.set q src (w₁ ++ 2 :: w₂))).length - 1)
     (Compile.encodeTape (State.set (State.set q dst (State.get q dst ++ [b]))
       src (w₁ ++ 2 :: w₂)) ++ res)
@@ -1075,12 +1106,13 @@ theorem Compile.copyPipe_run (b : Nat) (hb : b ≤ 1) (q : State) (dst src : Var
   have hA5traj := composeFlatTM_no_early_halt (Compile.copyPipeA4TM_valid b dst hb)
     (ScanLeft.scanLeftUntilTM_valid 4 3 (by decide))
     (by show (18 + 3 * dst : Nat) < (Compile.copyPipeA4TM b dst).states
-        rw [Compile.copyPipeA4TM_states]; omega)
+        rw [Compile.copyPipeA4TM_states]; exact Nat.add_lt_add_right (by decide) _)
     { state_idx := 0,
       tapes := [([], 1 + (Compile.encodeRegs (q.take src)).length + w₁.length,
                  Compile.encodeTape (State.set q src (w₁ ++ 2 :: w₂)) ++ res)] }
     (by show (0 : Nat) < (Compile.copyPipeA4TM b dst).states
-        rw [Compile.copyPipeA4TM_states]; omega)
+        rw [Compile.copyPipeA4TM_states]
+        exact Nat.lt_of_lt_of_le (by decide) (Nat.le_add_right _ _))
     [] ((Compile.encodeTape (State.set q src (w₁ ++ 2 :: w₂))).length - 1)
     (Compile.encodeTape (State.set (State.set q dst (State.get q dst ++ [b]))
       src (w₁ ++ 2 :: w₂)) ++ res)
@@ -1093,13 +1125,14 @@ theorem Compile.copyPipe_run (b : Nat) (hb : b ≤ 1) (q : State) (dst src : Var
       = composeFlatTM (Compile.copyPipeA4TM b dst) (ScanLeft.scanLeftUntilTM 4 3)
           (18 + 3 * dst) := rfl
   have hexA5 : 1 + (Compile.copyPipeA4TM b dst).states = 20 + 3 * dst := by
-    rw [Compile.copyPipeA4TM_states]; omega
+    rw [Compile.copyPipeA4TM_states]; exact (Nat.add_assoc 1 19 _).symm
   rw [hexA5] at hA5run
   have hA5halt : (Compile.copyPipeA5TM b dst).halt[20 + 3 * dst]? = some true := by
     have h := Compile.composeFlatTM_halt_intro (Compile.copyPipeA4TM b dst)
       (ScanLeft.scanLeftUntilTM 4 3) 1 (18 + 3 * dst) rfl
     rw [Compile.copyPipeA4TM_states] at h
-    rw [hMA5, show (20 + 3 * dst : Nat) = 19 + 3 * dst + 1 from by omega]
+    rw [hMA5, show (20 + 3 * dst : Nat) = 19 + 3 * dst + 1 from
+      (Nat.add_right_comm 19 (3 * dst) 1).symm]
     exact h
   -- ### stage 7: restore the bit over the mark and step right
   have h7_run := Compile.restoreStepTM_run b hb []
@@ -1129,12 +1162,13 @@ theorem Compile.copyPipe_run (b : Nat) (hb : b ≤ 1) (q : State) (dst src : Var
   have hFrun := composeFlatTM_run (Compile.copyPipeA5TM_valid b dst hb)
     (Compile.restoreStepTM_valid b hb)
     (by show (20 + 3 * dst : Nat) < (Compile.copyPipeA5TM b dst).states
-        rw [Compile.copyPipeA5TM_states]; omega)
+        rw [Compile.copyPipeA5TM_states]; exact Nat.add_lt_add_right (by decide) _)
     { state_idx := 0,
       tapes := [([], 1 + (Compile.encodeRegs (q.take src)).length + w₁.length,
                  Compile.encodeTape (State.set q src (w₁ ++ 2 :: w₂)) ++ res)] }
     (by show (0 : Nat) < (Compile.copyPipeA5TM b dst).states
-        rw [Compile.copyPipeA5TM_states]; omega)
+        rw [Compile.copyPipeA5TM_states]
+        exact Nat.lt_of_lt_of_le (by decide) (Nat.le_add_right _ _))
     [] (1 + (Compile.encodeRegs ((State.set q dst
       (State.get q dst ++ [b])).take src)).length + w₁.length)
     (Compile.encodeTape (State.set (State.set q dst (State.get q dst ++ [b]))
@@ -1147,12 +1181,13 @@ theorem Compile.copyPipe_run (b : Nat) (hb : b ≤ 1) (q : State) (dst src : Var
   have hFtraj := composeFlatTM_no_early_halt (Compile.copyPipeA5TM_valid b dst hb)
     (Compile.restoreStepTM_valid b hb)
     (by show (20 + 3 * dst : Nat) < (Compile.copyPipeA5TM b dst).states
-        rw [Compile.copyPipeA5TM_states]; omega)
+        rw [Compile.copyPipeA5TM_states]; exact Nat.add_lt_add_right (by decide) _)
     { state_idx := 0,
       tapes := [([], 1 + (Compile.encodeRegs (q.take src)).length + w₁.length,
                  Compile.encodeTape (State.set q src (w₁ ++ 2 :: w₂)) ++ res)] }
     (by show (0 : Nat) < (Compile.copyPipeA5TM b dst).states
-        rw [Compile.copyPipeA5TM_states]; omega)
+        rw [Compile.copyPipeA5TM_states]
+        exact Nat.lt_of_lt_of_le (by decide) (Nat.le_add_right _ _))
     [] (1 + (Compile.encodeRegs ((State.set q dst
       (State.get q dst ++ [b])).take src)).length + w₁.length)
     (Compile.encodeTape (State.set (State.set q dst (State.get q dst ++ [b]))
@@ -1167,8 +1202,7 @@ theorem Compile.copyPipe_run (b : Nat) (hb : b ≤ 1) (q : State) (dst src : Var
           (20 + 3 * dst) := rfl
   have hexF : 1 + (Compile.copyPipeA5TM b dst).states = Compile.copyPipeTM_exit dst := by
     rw [Compile.copyPipeA5TM_states]
-    show (1 + (22 + 3 * dst) : Nat) = 23 + 3 * dst
-    omega
+    exact (Nat.add_assoc 1 22 _).symm
   rw [hexF] at hFrun
   -- ### assemble the statement
   have hLout : (Compile.encodeTape (State.set q dst (State.get q dst ++ [b]))
@@ -1181,8 +1215,7 @@ theorem Compile.copyPipe_run (b : Nat) (hb : b ≤ 1) (q : State) (dst src : Var
       conv_lhs => rw [← hq'_restore]
       rw [Compile.encodeTape_set_cell_length _ src hsrc' w₁ w₂ b,
           Compile.encodeTape_set_cell_length _ src hsrc' w₁ w₂ 2]
-    rw [List.length_append, hsame]
-    omega
+    rw [List.length_append, hsame, hE1']
   have happ_le' : t₃ ≤ 2 * ((Compile.encodeTape (State.set q src (w₁ ++ 2 :: w₂))).length
       + res.length) + 3 := by
     rw [List.length_append] at happ_le; exact happ_le
@@ -1191,7 +1224,8 @@ theorem Compile.copyPipe_run (b : Nat) (hb : b ≤ 1) (q : State) (dst src : Var
     have hh := hFtraj k hk ck hck
     exact ⟨ClearGadget.ne_of_not_halting (Compile.copyPipeTM_exit_is_halt b dst) hh, hh⟩
   · rw [hLout]
-    omega
+    exact Compile.copyPipe_budget (le_of_le_of_eq (Nat.le_add_right _ _) hLM.symm) happ_le'
+      (le_trans (Nat.sub_le _ _) (Nat.sub_le _ _))
 
 /-- **Cursor-loop body, ITERATE contract** (`loopTM_run`'s iteration shape).
 From the un-marked cursor config (head ON src's cell `i = |w₁|`, a bit `b`),
@@ -1623,6 +1657,31 @@ theorem Compile.copyBody_run_done (q : State) (dst src : Var)
     exact ⟨ClearGadget.ne_of_not_halting (Compile.copyBodyTM_exitDone_is_halt dst) hh,
            ClearGadget.ne_of_not_halting (Compile.copyBodyTM_exitLoop_is_halt dst) hh, hh⟩
 
+private theorem Compile.loop_len_mono {Ak An G Es Lk Ln d k un r : Nat}
+    (h1 : Ak + G = Es + Lk) (h2 : An + G = Es + Ln) (h3 : Lk = d + k) (h4 : Ln = d + un)
+    (hk : k ≤ un) : Ak + r ≤ An + r := by omega
+
+private theorem Compile.tail_len_mono {Ak An G Es Lk k c r : Nat}
+    (h1 : Ak + G = Es + Lk) (h2 : An + G = Es + c) (h3 : Lk = k) (hk : k ≤ c) :
+    Ak + r ≤ An + r := by omega
+
+private theorem Compile.sub_succ_add_one {n j : Nat} (h : j < n) :
+    n - (j + 1) + 1 = n - j := by omega
+
+private theorem Compile.add_sub_succ_add_one {X n j : Nat} (h : j < n) :
+    X + (n - (j + 1)) + 1 = X + (n - j) := by omega
+
+private theorem Compile.add_sub_succ_add_one_add_one {X n j : Nat} (h : j < n) :
+    X + (n - (j + 1) + 1) + 1 = X + (n - j) + 1 := by omega
+
+private theorem Compile.add_len_cons_take {X a b : Nat} {l : List Nat} (h : a ≤ l.length) :
+    X + (b :: l.take a).length = X + a + 1 := by
+  rw [List.length_cons, List.length_take, Nat.min_eq_left h, Nat.add_assoc]
+
+private theorem Compile.copyBody_exits_ne (d : Nat) : 54 + 6 * d ≠ 29 + 3 * d := by omega
+
+private theorem Compile.copyBody_exitLoop_lt (d : Nat) : 29 + 3 * d < 55 + 6 * d := by omega
+
 /-- **Generalised cursor-copy loop (`copyLoopTM dst`) — APPENDS src to dst.**
 Entered with the head on src's first cell, the loop copies src bit-by-bit and
 *appends* it to `dst`'s existing content `d₀`, halting at its dedicated halt
@@ -1707,10 +1766,10 @@ theorem Compile.copyLoopAppend_run (s : State) (dst src : Var)
     have h2 := Compile.encodeTape_set_length s dst (d₀ ++ u) hdst
     have hdlen : d₀.length = (State.get s dst).length := by rw [hd₀]
     have h3 : (d₀ ++ u.take k).length = d₀.length + k := by
-      rw [List.length_append, List.length_take]; omega
+      rw [List.length_append, List.length_take, Nat.min_eq_left (le_of_le_of_eq hk hn)]
     have h4 : (d₀ ++ u).length = d₀.length + u.length := by rw [List.length_append]
     simp only [List.length_append]
-    omega
+    exact Compile.loop_len_mono h1 h2 h3 h4 (le_of_le_of_eq hk hn)
   -- ### done contract at `T 0`... i.e. `j = 0`: `T 0` is the FINISHED tape.
   have hdone0 := Compile.copyBody_run_done (s.set dst (d₀ ++ u)) dst src hne
     (by rw [hlen_j]; exact hdst) (by rw [hlen_j]; exact hsrc)
@@ -1755,7 +1814,8 @@ theorem Compile.copyLoopAppend_run (s : State) (dst src : Var)
       t ≤ 5 * (Compile.encodeTape (s.set dst (d₀ ++ u)) ++ res).length + 21 := by
     intro j hj
     -- the cursor sits at bit `k₀ := n − j − 1` of `u`.
-    have hk₀ : n - (j + 1) < u.length := by rw [← hn]; omega
+    have hk₀ : n - (j + 1) < u.length :=
+      lt_of_lt_of_eq (Nat.sub_lt (Nat.lt_of_le_of_lt (Nat.zero_le _) hj) (Nat.succ_pos j)) hn
     have hsplit_j : State.get (s.set dst (d₀ ++ u.take (n - (j + 1)))) src
         = u.take (n - (j + 1)) ++ u[n - (j + 1)] :: u.drop (n - (j + 1) + 1) := by
       rw [Compile.get_set_ne s dst _ src hdst (Ne.symm hne), ← hu,
@@ -1773,19 +1833,20 @@ theorem Compile.copyLoopAppend_run (s : State) (dst src : Var)
       rw [Compile.get_set_eq s dst _ hdst, Compile.set_set s dst _ _ hdst, List.append_assoc,
           show u.take (n - (j + 1)) ++ [u[n - (j + 1)]] = u.take (n - (j + 1) + 1) from by
             rw [List.take_add_one, List.getElem?_eq_getElem hk₀]; rfl,
-          show n - (j + 1) + 1 = n - j from by omega]
+          Compile.sub_succ_add_one hj]
     rw [hstate_eq] at hrun hbnd
     -- align the heads with `T (j+1)` / `T j` (`|u.take k| = k`).
     have hhead_in : 1 + (Compile.encodeRegs ((s.set dst
           (d₀ ++ u.take (n - (j + 1)))).take src)).length + (u.take (n - (j + 1))).length
         = 1 + (Compile.encodeRegs ((s.set dst
           (d₀ ++ u.take (n - (j + 1)))).take src)).length + (n - (j + 1)) := by
-      rw [List.length_take]; omega
+      rw [List.length_take, Nat.min_eq_left (Nat.le_of_lt hk₀)]
     have hhead_out : 1 + (Compile.encodeRegs ((s.set dst
           (d₀ ++ u.take (n - j))).take src)).length + (u.take (n - (j + 1))).length + 1
         = 1 + (Compile.encodeRegs ((s.set dst
           (d₀ ++ u.take (n - j))).take src)).length + (n - j) := by
-      rw [List.length_take]; omega
+      rw [List.length_take, Nat.min_eq_left (Nat.le_of_lt hk₀)]
+      exact Compile.add_sub_succ_add_one hj
     rw [hhead_in, hhead_out] at hrun
     rw [hhead_in] at htraj
     refine ⟨t, ?_, ?_, ?_⟩
@@ -1795,19 +1856,19 @@ theorem Compile.copyLoopAppend_run (s : State) (dst src : Var)
     · rw [show (Compile.copyBodyTM dst).start = 0 from rfl]
       simp only [hTdef]
       exact htraj
-    · have hmono := hLen_le (n - j) (by omega)
-      omega
+    · exact le_trans hbnd (Nat.add_le_add_right
+        (Nat.mul_le_mul_left 5 (hLen_le (n - j) (Nat.sub_le n j))) 21)
   -- ### assemble with `loopTM_run` / `loopTM_no_early_halt`.
   set tIter : Nat → Nat := fun j => if hj : j < n then (hiter_ex j hj).choose else 0
     with htIter
   have h_ne_exits : Compile.copyBody_exitDone dst ≠ Compile.copyBody_exitLoop dst := by
-    show (54 + 6 * dst : Nat) ≠ 29 + 3 * dst; omega
+    show (54 + 6 * dst : Nat) ≠ 29 + 3 * dst; exact Compile.copyBody_exits_ne dst
   have h_done_lt : Compile.copyBody_exitDone dst < (Compile.copyBodyTM dst).states := by
     rw [Compile.copyBodyTM_states]
-    show (54 + 6 * dst : Nat) < 55 + 6 * dst; omega
+    show (54 + 6 * dst : Nat) < 55 + 6 * dst; exact Nat.add_lt_add_right (by decide) _
   have h_loop_lt : Compile.copyBody_exitLoop dst < (Compile.copyBodyTM dst).states := by
     rw [Compile.copyBodyTM_states]
-    show (29 + 3 * dst : Nat) < 55 + 6 * dst; omega
+    show (29 + 3 * dst : Nat) < 55 + 6 * dst; exact Compile.copyBody_exitLoop_lt dst
   have h_iter_full : ∀ j, j < n →
       runFlatTM (tIter j) (Compile.copyBodyTM dst)
           { state_idx := (Compile.copyBodyTM dst).start, tapes := [T (j + 1)] }
@@ -1828,7 +1889,7 @@ theorem Compile.copyLoopAppend_run (s : State) (dst src : Var)
     intro j hj
     have hb := (hiter_ex j hj).choose_spec.2.2
     simp only [htIter, dif_pos hj]
-    omega
+    exact Nat.succ_le_succ (Nat.le_succ_of_le hb)
   have hmain := loopTM_run (Compile.copyBodyTM dst) (Compile.copyBody_exitDone dst)
     (Compile.copyBody_exitLoop dst) (Compile.copyBodyTM_valid dst) h_done_lt h_loop_lt
     h_ne_exits T h_sym tIter 2 h_done_full n h_iter_full
@@ -1857,7 +1918,8 @@ theorem Compile.copyLoopAppend_run (s : State) (dst src : Var)
     have hh := hmain_traj k hk ck hck
     exact ⟨ClearGadget.ne_of_not_halting hexit_halt hh, hh⟩
   · exact Compile.loopBudget_le tIter 2
-      (5 * (Compile.encodeTape (s.set dst (d₀ ++ u)) ++ res).length + 23) n (by omega) h_iter_bnd
+      (5 * (Compile.encodeTape (s.set dst (d₀ ++ u)) ++ res).length + 23) n
+      (le_trans (by decide) (Nat.le_add_left 23 _)) h_iter_bnd
 
 /-- **The cursor-copy loop with `dst` already cleared** (the `opCopy` instance).
 Empty-`dst` specialisation of `copyLoopAppend_run` (`[] ++ src = src`), kept so
@@ -1888,6 +1950,77 @@ theorem Compile.copyLoop_run (s : State) (dst src : Var)
   have h := Compile.copyLoopAppend_run s dst src hne hdst hsrc hbit res hres
   rw [hdst_empty, List.nil_append] at h
   exact h
+
+private theorem Compile.cursor_end_le (s : State) (src : Var) (hsrc : src < s.length) :
+    1 + (Compile.encodeRegs (s.take src)).length + (State.get s src).length + 2
+      ≤ (Compile.encodeTape s).length := by
+  have hdec := congrArg List.length (Compile.encodeTape_reg_decomp_at s src hsrc).2
+  simp only [List.length_append, List.length_cons, Compile.shiftReg, List.length_map,
+    List.length_nil] at hdec
+  omega
+
+private theorem Compile.reg_len_add_three_le (s : State) (src : Var) (hsrc : src < s.length)
+    (res : List Nat) : (State.get s src).length + 3 ≤ (Compile.encodeTape s ++ res).length := by
+  have h := Compile.cursor_end_le s src hsrc
+  rw [List.length_append]; omega
+
+private theorem Compile.nav_le_of_decomp {K : List (List Nat)} {T rest : List Nat}
+    (h : T = (3 : Nat) :: (AppendGadget.regBlocks K ++ rest)) :
+    ClearGadget.navSteps K ≤ 2 * T.length + 1 := by
+  have h1 := ClearGadget.navSteps_le K
+  have h2 := congrArg List.length h
+  simp only [List.length_cons, List.length_append] at h2
+  omega
+
+private theorem Compile.pos_add_one_add (x y : Nat) : 0 < x + 1 + y := by omega
+
+private theorem Compile.pos_add_two_add (x y : Nat) : 0 < x + 2 + y := by omega
+
+private theorem Compile.succ_lt_of_le_of_add_two_le {i a E : Nat} (h1 : i ≤ a)
+    (h2 : a + 2 ≤ E) : i + 1 < E := by omega
+
+private theorem Compile.lt_length_append_of_lt {T U : List Nat} {i : Nat}
+    (h : i < T.length) : i < (T ++ U).length := by
+  rw [List.length_append]; omega
+
+private theorem Compile.len_balance_nil {A n B r : Nat} (h : A + n = B) :
+    A + (r + n) = B + r := by omega
+
+private theorem Compile.len_balance {A n B m r : Nat} (h : A + n = B + m) :
+    A + (r + n) = B + r + m := by omega
+
+private theorem Compile.region_inner_le {L g : Nat} (h1 : g + 3 ≤ L) (h2 : 9 * L ≤ 9 * L * L) :
+    5 * (L + g) + 23 ≤ 9 * L * L + 9 * L + 30 := by omega
+
+private theorem Compile.region_budget {tc ns tl X g L LF EF : Nat}
+    (hc : tc ≤ 9 * L * L + 9) (hn : ns ≤ 2 * L + 1)
+    (hl : tl ≤ (g + 1) * (9 * L * L + 9 * L + 30)) (hX : 1 + X + g + 2 ≤ EF) (hEF : EF ≤ LF)
+    (hLF : LF = L + g) (hg : g + 3 ≤ L) :
+    tc + 1 + ns + 1 + tl + 1 + (1 + X + g + 1)
+      ≤ (g + 1) * (9 * L * L + 9 * L + 30) + (9 * L * L + 9 * L + 30) := by
+  omega
+
+private theorem Compile.region_budget_tail {tc ns tb X g g' L LF EF : Nat}
+    (hc : tc ≤ 9 * L * L + 9) (hn : ns ≤ 2 * L + 1)
+    (hb : tb ≤ g * (9 * L * L + 9 * L + 30) + 3) (hX : 1 + X + g + 2 ≤ EF) (hEF : EF ≤ LF)
+    (hLF : LF = L + g') (hg' : g' ≤ g) (hg : g + 3 ≤ L) :
+    tc + 1 + ns + 1 + tb + 1 + (1 + X + g + 1)
+      ≤ g * (9 * L * L + 9 * L + 30) + 2 * (9 * L * L + 9 * L + 30) := by
+  omega
+
+private theorem Compile.lt_of_add_two_le {a E : Nat} (h : a + 2 ≤ E) : a < E := by omega
+
+private theorem Compile.pos_two_add_add (x y : Nat) : 0 < 2 + x + y := by omega
+
+private theorem Compile.len_cancel_append {A d B u : Nat} (h : A + d = B + (d + u)) :
+    A = B + u := by omega
+
+private theorem Compile.succ_le_add_of_add_two_le {a E r : Nat} (h : a + 2 ≤ E) :
+    a + 1 ≤ E + r := by omega
+
+private theorem Compile.copyAppend_budget {ns tl X g L LF K : Nat} (hn : ns ≤ 2 * L + 1)
+    (hl : tl ≤ K) (hin : L ≤ LF) (hr : 1 + X + g + 1 ≤ LF) :
+    ns + 1 + tl + 1 + (1 + X + g + 1) ≤ K + 3 * LF + 4 := by omega
 
 /-- **`copyEmptyRawTM` run lemma — APPEND form (`dst` may be NONEMPTY).** From
 `encodeTape s ++ res` at head `0`, the raw chain `navigate ⨾ cursor loop ⨾ rewind`
@@ -1970,18 +2103,14 @@ theorem Compile.copyAppendRaw_run (s : State) (dst src : Var) (hne : dst ≠ src
         ((s.set dst (State.get s dst ++ State.get s src)).take src)).length
         + (State.get s src).length + 2
       ≤ (Compile.encodeTape (s.set dst (State.get s dst ++ State.get s src))).length := by
-    have hdec := congrArg List.length
-      (Compile.encodeTape_reg_decomp_at (s.set dst (State.get s dst ++ State.get s src)) src hsrc₂).2
-    rw [hget₂_src] at hdec
-    simp only [List.length_append, List.length_cons, Compile.shiftReg, List.length_map,
-      List.length_nil] at hdec
-    omega
+    have h := Compile.cursor_end_le _ src hsrc₂
+    rwa [hget₂_src] at h
   have hTF_lt4 : ∀ x ∈ Compile.encodeTape
       (s.set dst (State.get s dst ++ State.get s src)) ++ res, x < 4 :=
     Compile.encodeTape_append_res_lt_four _ _ hbit₂ hres
   have h0F : 0 < (Compile.encodeTape
       (s.set dst (State.get s dst ++ State.get s src)) ++ res).length := by
-    rw [List.length_append, Compile.encodeTape_length]; omega
+    rw [List.length_append, Compile.encodeTape_length]; exact Compile.pos_add_two_add _ _
   have htargetF : (Compile.encodeTape
       (s.set dst (State.get s dst ++ State.get s src)) ++ res).get ⟨0, h0F⟩ = 3 := by
     have hkey : (Compile.encodeTape
@@ -1999,13 +2128,14 @@ theorem Compile.copyAppendRaw_run (s : State) (dst src : Var) (hne : dst ≠ src
         (Compile.encodeTape (s.set dst (State.get s dst ++ State.get s src)) ++ res).get ⟨i, h⟩ ≠ 3 := by
     intro i hi0 hile
     have hi1 : i + 1 < (Compile.encodeTape
-        (s.set dst (State.get s dst ++ State.get s src))).length := by omega
-    have hlt : i < (Compile.encodeTape
-        (s.set dst (State.get s dst ++ State.get s src)) ++ res).length := by
-      rw [List.length_append]; omega
-    refine ⟨hlt, ?_⟩
+        (s.set dst (State.get s dst ++ State.get s src))).length :=
+      Compile.succ_lt_of_le_of_add_two_le hile hHF2
     have hilt_e : i < (Compile.encodeTape
-        (s.set dst (State.get s dst ++ State.get s src))).length := by omega
+        (s.set dst (State.get s dst ++ State.get s src))).length := Nat.lt_of_succ_lt hi1
+    have hlt : i < (Compile.encodeTape
+        (s.set dst (State.get s dst ++ State.get s src)) ++ res).length :=
+      Compile.lt_length_append_of_lt hilt_e
+    refine ⟨hlt, ?_⟩
     have hkey : (Compile.encodeTape (s.set dst (State.get s dst ++ State.get s src)) ++ res)[i]?
         = some ((Compile.encodeTape
             (s.set dst (State.get s dst ++ State.get s src))).get ⟨i, hilt_e⟩) := by
@@ -2022,12 +2152,12 @@ theorem Compile.copyAppendRaw_run (s : State) (dst src : Var) (hne : dst ≠ src
     (Compile.encodeTape (s.set dst (State.get s dst ++ State.get s src)) ++ res) h0F htargetF
     (1 + (Compile.encodeRegs ((s.set dst (State.get s dst ++ State.get s src)).take src)).length
       + (State.get s src).length)
-    (by rw [List.length_append]; omega) hcellsF
+    (Compile.lt_length_append_of_lt (Compile.lt_of_add_two_le hHF2)) hcellsF
   have hrew_traj := ScanLeft.scanLeft_no_early_halt 4 3 []
     (Compile.encodeTape (s.set dst (State.get s dst ++ State.get s src)) ++ res)
     (1 + (Compile.encodeRegs ((s.set dst (State.get s dst ++ State.get s src)).take src)).length
       + (State.get s src).length)
-    (by rw [List.length_append]; omega) hcellsF
+    (Compile.lt_length_append_of_lt (Compile.lt_of_add_two_le hHF2)) hcellsF
   -- ### level B: navigate ⨾ copy loop
   have hT_lt4 : ∀ x ∈ Compile.encodeTape s ++ res, x < 4 :=
     Compile.encodeTape_append_res_lt_four _ _ hbit hres
@@ -2052,7 +2182,8 @@ theorem Compile.copyAppendRaw_run (s : State) (dst src : Var) (hne : dst ≠ src
     (ClearGadget.navigateToRegTM_exit_lt src)
     { state_idx := 0, tapes := [([], 0, Compile.encodeTape s ++ res)] }
     (by show (0 : Nat) < (ClearGadget.navigateToRegTM src).states
-        rw [ClearGadget.navigateToRegTM_states]; omega)
+        rw [ClearGadget.navigateToRegTM_states]
+        exact Nat.lt_of_lt_of_le (by decide) (Nat.le_add_right _ _))
     [] (1 + (Compile.encodeRegs (List.take src s)).length) (Compile.encodeTape s ++ res)
     hsymB hnav_run
     (fun k hk ck hck => by
@@ -2064,7 +2195,8 @@ theorem Compile.copyAppendRaw_run (s : State) (dst src : Var) (hne : dst ≠ src
     (ClearGadget.navigateToRegTM_exit_lt src)
     { state_idx := 0, tapes := [([], 0, Compile.encodeTape s ++ res)] }
     (by show (0 : Nat) < (ClearGadget.navigateToRegTM src).states
-        rw [ClearGadget.navigateToRegTM_states]; omega)
+        rw [ClearGadget.navigateToRegTM_states]
+        exact Nat.lt_of_lt_of_le (by decide) (Nat.le_add_right _ _))
     [] (1 + (Compile.encodeRegs (List.take src s)).length) (Compile.encodeTape s ++ res)
     hsymB hnav_run
     (fun k hk ck hck => by
@@ -2077,7 +2209,7 @@ theorem Compile.copyAppendRaw_run (s : State) (dst src : Var) (hne : dst ≠ src
   have heqB : Compile.copyLoopTM_exit dst + (ClearGadget.navigateToRegTM src).states
       = (2 + 3 * src) + (55 + 6 * dst) := by
     rw [ClearGadget.navigateToRegTM_states]
-    show (55 + 6 * dst : Nat) + (2 + 3 * src) = _; omega
+    show (55 + 6 * dst : Nat) + (2 + 3 * src) = _; exact Nat.add_comm _ _
   rw [heqB] at hBrun
   rw [Nat.add_comm (ClearGadget.navigateToRegTM src).states (Compile.copyLoopTM_exit dst),
       heqB] at hBhalt
@@ -2103,7 +2235,7 @@ theorem Compile.copyAppendRaw_run (s : State) (dst src : Var) (hne : dst ≠ src
           (ClearGadget.navigateToRegTM_exit src)).states := by
     rw [composeFlatTM_states, ClearGadget.navigateToRegTM_states src,
         Compile.copyLoopTM_states dst]
-    simp only [Var]; omega
+    exact Nat.add_lt_add_left (Nat.add_lt_add_right (by decide) _) _
   have hCrun := composeFlatTM_run
     (composeFlatTM_valid _ _ _ (ClearGadget.navigateToRegTM_valid src)
       (Compile.copyLoopTM_valid dst) (ClearGadget.navigateToRegTM_exit_lt src)
@@ -2111,7 +2243,8 @@ theorem Compile.copyAppendRaw_run (s : State) (dst src : Var) (hne : dst ≠ src
     ClearGadget.justRewindTM_valid hexC_lt
     { state_idx := 0, tapes := [([], 0, Compile.encodeTape s ++ res)] }
     (by show (0 : Nat) < (composeFlatTM _ _ _).states
-        rw [composeFlatTM_states, ClearGadget.navigateToRegTM_states]; omega)
+        rw [composeFlatTM_states, ClearGadget.navigateToRegTM_states]
+        exact Compile.pos_two_add_add _ _)
     [] (1 + (Compile.encodeRegs ((s.set dst (State.get s dst ++ State.get s src)).take src)).length
       + (State.get s src).length)
     (Compile.encodeTape (s.set dst (State.get s dst ++ State.get s src)) ++ res)
@@ -2127,7 +2260,8 @@ theorem Compile.copyAppendRaw_run (s : State) (dst src : Var) (hne : dst ≠ src
     ClearGadget.justRewindTM_valid hexC_lt
     { state_idx := 0, tapes := [([], 0, Compile.encodeTape s ++ res)] }
     (by show (0 : Nat) < (composeFlatTM _ _ _).states
-        rw [composeFlatTM_states, ClearGadget.navigateToRegTM_states]; omega)
+        rw [composeFlatTM_states, ClearGadget.navigateToRegTM_states]
+        exact Compile.pos_two_add_add _ _)
     [] (1 + (Compile.encodeRegs ((s.set dst (State.get s dst ++ State.get s src)).take src)).length
       + (State.get s src).length)
     (Compile.encodeTape (s.set dst (State.get s dst ++ State.get s src)) ++ res)
@@ -2142,38 +2276,31 @@ theorem Compile.copyAppendRaw_run (s : State) (dst src : Var) (hne : dst ≠ src
       = Compile.copyEmptyRawTM_exit dst src := by
     rw [composeFlatTM_states, ClearGadget.navigateToRegTM_states, Compile.copyLoopTM_states,
         Compile.copyEmptyRawTM_exit, Compile.copyEmptyPreStates]
-    omega
+    exact Nat.add_comm _ _
   have hrun := hCrun.1
-  simp only [hstate_eq] at hrun
+  rw [hstate_eq] at hrun
   -- budget bounds.
   have hnav_le : ClearGadget.navSteps ((List.take src s).map Compile.shiftReg)
-      ≤ 2 * (Compile.encodeTape s ++ res).length + 1 := by
-    have h := ClearGadget.navSteps_le ((List.take src s).map Compile.shiftReg)
-    rw [Compile.regBlocks_map_shiftReg] at h
-    have hreglen : (Compile.encodeRegs (List.take src s)).length
-        ≤ (Compile.encodeTape s ++ res).length := by
-      rw [List.length_append]
-      have hsplit := congrArg List.length hdecomp
-      simp only [List.length_cons, List.length_append, Compile.regBlocks_map_shiftReg] at hsplit
-      omega
-    omega
+      ≤ 2 * (Compile.encodeTape s ++ res).length + 1 :=
+    Compile.nav_le_of_decomp hdecomp
   have hset_len : (Compile.encodeTape (s.set dst (State.get s dst ++ State.get s src))).length
       = (Compile.encodeTape s).length + (State.get s src).length := by
     have hbal := Compile.encodeTape_set_length s dst (State.get s dst ++ State.get s src) hdst
-    rw [List.length_append] at hbal; omega
+    rw [List.length_append] at hbal; exact Compile.len_cancel_append hbal
   have hin_le : (Compile.encodeTape s ++ res).length
       ≤ (Compile.encodeTape (s.set dst (State.get s dst ++ State.get s src)) ++ res).length := by
-    rw [List.length_append, List.length_append, hset_len]; omega
+    rw [List.length_append, List.length_append, hset_len]
+    exact Nat.add_le_add_right (Nat.le_add_right _ _) _
   have hrew_le : 1 + (Compile.encodeRegs
         ((s.set dst (State.get s dst ++ State.get s src)).take src)).length
       + (State.get s src).length + 1
       ≤ (Compile.encodeTape (s.set dst (State.get s dst ++ State.get s src)) ++ res).length := by
-    rw [List.length_append]; omega
+    rw [List.length_append]; exact Compile.succ_le_add_of_add_two_le hHF2
   refine ⟨_, hrun, ?_, ?_⟩
   · intro k hk ck hck
     have hh := hCtraj k hk ck hck
     exact ⟨ClearGadget.ne_of_not_halting (Compile.copyEmptyRawTM_exit_is_halt dst src) hh, hh⟩
-  · omega
+  · exact Compile.copyAppend_budget hnav_le hloop_le hin_le hrew_le
 
 /-- **The `opCopyAppend` CompiledCmd run lemma** (`dst ≠ src`): the wrapper around
 `copyEmptyRawTM` (rewind boundary halt demoted) appends `src` to `dst`'s existing
@@ -2257,9 +2384,9 @@ theorem Compile.opCopy_run (s : State) (dst src : Var) (hne : dst ≠ src)
   have hexit : (Compile.opCopy dst src).exit = Compile.copyRegionFullTM_exit dst src := by
     rw [Compile.opCopy, if_neg hne]
   have hstart : (Compile.opCopy dst src).M.start = 0 := by
-    rw [hM, joinTwoHalts_start]
-    show (ClearGadget.navigateToRegTM dst).start = 0
-    exact ClearGadget.navigateToRegTM_start dst
+    rw [hM, joinTwoHalts_start, Compile.copyRegionFullTM, composeFlatTM_start,
+      composeFlatTM_start, composeFlatTM_start]
+    exact ClearGadget.clearRegionTM_start dst
   have hinit : initFlatConfig (Compile.opCopy dst src).M [Compile.encodeTape s ++ res_in]
       = { state_idx := 0, tapes := [([], 0, Compile.encodeTape s ++ res_in)] } := by
     simp only [initFlatConfig, hstart, List.map_cons, List.map_nil]
@@ -2336,18 +2463,14 @@ theorem Compile.opCopy_run (s : State) (dst src : Var) (hne : dst ≠ src)
   have hHF2 : 1 + (Compile.encodeRegs ((s.set dst (State.get s src)).take src)).length
         + (State.get s src).length + 2
       ≤ (Compile.encodeTape (s.set dst (State.get s src))).length := by
-    have hdec := congrArg List.length
-      (Compile.encodeTape_reg_decomp_at (s.set dst (State.get s src)) src hsrc₂).2
-    rw [hget₂_src] at hdec
-    simp only [List.length_append, List.length_cons, Compile.shiftReg, List.length_map,
-      List.length_nil] at hdec
-    omega
+    have h := Compile.cursor_end_le _ src hsrc₂
+    rwa [hget₂_src] at h
   have hTF_lt4 : ∀ x ∈ Compile.encodeTape (s.set dst (State.get s src))
       ++ (res_in ++ List.replicate (State.get s dst).length 0), x < 4 :=
     Compile.encodeTape_append_res_lt_four _ _ hbit₂ hres₁
   have h0F : 0 < (Compile.encodeTape (s.set dst (State.get s src))
       ++ (res_in ++ List.replicate (State.get s dst).length 0)).length := by
-    rw [List.length_append, Compile.encodeTape_length]; omega
+    rw [List.length_append, Compile.encodeTape_length]; exact Compile.pos_add_two_add _ _
   have htargetF : (Compile.encodeTape (s.set dst (State.get s src))
       ++ (res_in ++ List.replicate (State.get s dst).length 0)).get ⟨0, h0F⟩ = 3 := by
     have hkey : (Compile.encodeTape (s.set dst (State.get s src))
@@ -2365,13 +2488,14 @@ theorem Compile.opCopy_run (s : State) (dst src : Var) (hne : dst ≠ src)
         (Compile.encodeTape (s.set dst (State.get s src))
           ++ (res_in ++ List.replicate (State.get s dst).length 0)).get ⟨i, h⟩ ≠ 3 := by
     intro i hi0 hile
-    have hi1 : i + 1 < (Compile.encodeTape (s.set dst (State.get s src))).length := by
-      omega
+    have hi1 : i + 1 < (Compile.encodeTape (s.set dst (State.get s src))).length :=
+      Compile.succ_lt_of_le_of_add_two_le hile hHF2
+    have hilt_e : i < (Compile.encodeTape (s.set dst (State.get s src))).length :=
+      Nat.lt_of_succ_lt hi1
     have hlt : i < (Compile.encodeTape (s.set dst (State.get s src))
-        ++ (res_in ++ List.replicate (State.get s dst).length 0)).length := by
-      rw [List.length_append]; omega
+        ++ (res_in ++ List.replicate (State.get s dst).length 0)).length :=
+      Compile.lt_length_append_of_lt hilt_e
     refine ⟨hlt, ?_⟩
-    have hilt_e : i < (Compile.encodeTape (s.set dst (State.get s src))).length := by omega
     have hkey : (Compile.encodeTape (s.set dst (State.get s src))
           ++ (res_in ++ List.replicate (State.get s dst).length 0))[i]?
         = some ((Compile.encodeTape (s.set dst (State.get s src))).get ⟨i, hilt_e⟩) := by
@@ -2390,13 +2514,13 @@ theorem Compile.opCopy_run (s : State) (dst src : Var) (hne : dst ≠ src)
       ++ (res_in ++ List.replicate (State.get s dst).length 0)) h0F htargetF
     (1 + (Compile.encodeRegs ((s.set dst (State.get s src)).take src)).length
       + (State.get s src).length)
-    (by rw [List.length_append]; omega) hcellsF
+    (Compile.lt_length_append_of_lt (Compile.lt_of_add_two_le hHF2)) hcellsF
   have hrew_traj := ScanLeft.scanLeft_no_early_halt 4 3 []
     (Compile.encodeTape (s.set dst (State.get s src))
       ++ (res_in ++ List.replicate (State.get s dst).length 0))
     (1 + (Compile.encodeRegs ((s.set dst (State.get s src)).take src)).length
       + (State.get s src).length)
-    (by rw [List.length_append]; omega) hcellsF
+    (Compile.lt_length_append_of_lt (Compile.lt_of_add_two_le hHF2)) hcellsF
   -- ### level C1: clear ⨾ navigate
   have hT1_lt4 : ∀ x ∈ Compile.encodeTape (s.set dst ([] : List Nat))
       ++ (res_in ++ List.replicate (State.get s dst).length 0), x < 4 :=
@@ -2412,12 +2536,12 @@ theorem Compile.opCopy_run (s : State) (dst src : Var) (hne : dst ≠ src)
   have hexC1_lt : ClearGadget.clearRegionTM_exit dst < (ClearGadget.clearRegionTM dst).states := by
     rw [ClearGadget.clearRegionTM_states]
     show (ClearGadget.clearBodyRawTM dst).states < (ClearGadget.clearBodyRawTM dst).states + 1
-    omega
+    exact Nat.lt_succ_self _
   have hC1run := composeFlatTM_run (ClearGadget.clearRegionTM_valid dst)
     (ClearGadget.navigateToRegTM_valid src) hexC1_lt
     { state_idx := 0, tapes := [([], 0, Compile.encodeTape s ++ res_in)] }
     (by show (0 : Nat) < (ClearGadget.clearRegionTM dst).states
-        rw [ClearGadget.clearRegionTM_states]; omega)
+        rw [ClearGadget.clearRegionTM_states]; exact Nat.zero_lt_succ _)
     [] 0 (Compile.encodeTape (s.set dst ([] : List Nat))
       ++ (res_in ++ List.replicate (State.get s dst).length 0))
     hsymC1 hclear_run hclear_traj
@@ -2427,7 +2551,7 @@ theorem Compile.opCopy_run (s : State) (dst src : Var) (hne : dst ≠ src)
     (ClearGadget.navigateToRegTM_valid src) hexC1_lt
     { state_idx := 0, tapes := [([], 0, Compile.encodeTape s ++ res_in)] }
     (by show (0 : Nat) < (ClearGadget.clearRegionTM dst).states
-        rw [ClearGadget.clearRegionTM_states]; omega)
+        rw [ClearGadget.clearRegionTM_states]; exact Nat.zero_lt_succ _)
     [] 0 (Compile.encodeTape (s.set dst ([] : List Nat))
       ++ (res_in ++ List.replicate (State.get s dst).length 0))
     hsymC1 hclear_run hclear_traj
@@ -2467,8 +2591,7 @@ theorem Compile.opCopy_run (s : State) (dst src : Var) (hne : dst ≠ src)
       < (composeFlatTM (ClearGadget.clearRegionTM dst) (ClearGadget.navigateToRegTM src)
           (ClearGadget.clearRegionTM_exit dst)).states := by
     rw [composeFlatTM_states]
-    have := ClearGadget.navigateToRegTM_exit_lt src
-    omega
+    exact Nat.add_lt_add_left (ClearGadget.navigateToRegTM_exit_lt src) _
   have hC2run := composeFlatTM_run
     (composeFlatTM_valid _ _ _ (ClearGadget.clearRegionTM_valid dst)
       (ClearGadget.navigateToRegTM_valid src) hexC1_lt
@@ -2476,7 +2599,8 @@ theorem Compile.opCopy_run (s : State) (dst src : Var) (hne : dst ≠ src)
     (Compile.copyLoopTM_valid dst) hexC2_lt
     { state_idx := 0, tapes := [([], 0, Compile.encodeTape s ++ res_in)] }
     (by show (0 : Nat) < (composeFlatTM _ _ _).states
-        rw [composeFlatTM_states, ClearGadget.clearRegionTM_states]; omega)
+        rw [composeFlatTM_states, ClearGadget.clearRegionTM_states]
+        exact Compile.pos_add_one_add _ _)
     [] (1 + (Compile.encodeRegs (List.take src (s.set dst ([] : List Nat)))).length)
     (Compile.encodeTape (s.set dst ([] : List Nat))
       ++ (res_in ++ List.replicate (State.get s dst).length 0))
@@ -2493,7 +2617,8 @@ theorem Compile.opCopy_run (s : State) (dst src : Var) (hne : dst ≠ src)
     (Compile.copyLoopTM_valid dst) hexC2_lt
     { state_idx := 0, tapes := [([], 0, Compile.encodeTape s ++ res_in)] }
     (by show (0 : Nat) < (composeFlatTM _ _ _).states
-        rw [composeFlatTM_states, ClearGadget.clearRegionTM_states]; omega)
+        rw [composeFlatTM_states, ClearGadget.clearRegionTM_states]
+        exact Compile.pos_add_one_add _ _)
     [] (1 + (Compile.encodeRegs (List.take src (s.set dst ([] : List Nat)))).length)
     (Compile.encodeTape (s.set dst ([] : List Nat))
       ++ (res_in ++ List.replicate (State.get s dst).length 0))
@@ -2508,7 +2633,7 @@ theorem Compile.opCopy_run (s : State) (dst src : Var) (hne : dst ≠ src)
       = (ClearGadget.clearRegionTM dst).states + (2 + 3 * src) + (55 + 6 * dst) := by
     rw [composeFlatTM_states, ClearGadget.navigateToRegTM_states]
     show (55 + 6 * dst : Nat) + ((ClearGadget.clearRegionTM dst).states + (2 + 3 * src)) = _
-    omega
+    exact Nat.add_comm _ _
   rw [heq2] at hC2run
   have hC2halt : (composeFlatTM
         (composeFlatTM (ClearGadget.clearRegionTM dst) (ClearGadget.navigateToRegTM src)
@@ -2567,7 +2692,7 @@ theorem Compile.opCopy_run (s : State) (dst src : Var) (hne : dst ≠ src)
             + ClearGadget.navigateToRegTM_exit src)).states := by
     rw [composeFlatTM_states, composeFlatTM_states, ClearGadget.navigateToRegTM_states,
         Compile.copyLoopTM_states]
-    omega
+    exact Nat.add_lt_add_left (Nat.add_lt_add_right (by decide) _) _
   have hC3run := composeFlatTM_run
     (composeFlatTM_valid _ _ _
       (composeFlatTM_valid _ _ _ (ClearGadget.clearRegionTM_valid dst)
@@ -2580,7 +2705,7 @@ theorem Compile.opCopy_run (s : State) (dst src : Var) (hne : dst ≠ src)
     { state_idx := 0, tapes := [([], 0, Compile.encodeTape s ++ res_in)] }
     (by show (0 : Nat) < (composeFlatTM _ _ _).states
         rw [composeFlatTM_states, composeFlatTM_states, ClearGadget.clearRegionTM_states]
-        omega)
+        exact Nat.lt_of_lt_of_le (Compile.pos_add_one_add _ _) (Nat.le_add_right _ _))
     [] (1 + (Compile.encodeRegs ((s.set dst (State.get s src)).take src)).length
       + (State.get s src).length)
     (Compile.encodeTape (s.set dst (State.get s src))
@@ -2602,7 +2727,7 @@ theorem Compile.opCopy_run (s : State) (dst src : Var) (hne : dst ≠ src)
     { state_idx := 0, tapes := [([], 0, Compile.encodeTape s ++ res_in)] }
     (by show (0 : Nat) < (composeFlatTM _ _ _).states
         rw [composeFlatTM_states, composeFlatTM_states, ClearGadget.clearRegionTM_states]
-        omega)
+        exact Nat.lt_of_lt_of_le (Compile.pos_add_one_add _ _) (Nat.le_add_right _ _))
     [] (1 + (Compile.encodeRegs ((s.set dst (State.get s src)).take src)).length
       + (State.get s src).length)
     (Compile.encodeTape (s.set dst (State.get s src))
@@ -2623,7 +2748,7 @@ theorem Compile.opCopy_run (s : State) (dst src : Var) (hne : dst ≠ src)
         Compile.copyLoopTM_states]
     show (1 : Nat) + ((ClearGadget.clearRegionTM dst).states + (2 + 3 * src) + (56 + 6 * dst))
         = (ClearGadget.clearRegionTM dst).states + (2 + 3 * src) + (56 + 6 * dst) + 1
-    omega
+    exact Nat.add_comm _ _
   rw [heq3] at hC3run
   -- ### demote the boundary halt (joinTwoHalts) and conclude
   have hh2 : (Compile.copyRegionFullTM dst src).halt[
@@ -2661,39 +2786,29 @@ theorem Compile.opCopy_run (s : State) (dst src : Var) (hne : dst ≠ src)
     have hbal := Compile.encodeTape_set_length s dst [] hdst
     simp only [List.length_append, List.length_replicate, List.length_nil,
       Nat.add_zero] at hbal ⊢
-    omega
+    exact Compile.len_balance_nil hbal
   have hLF : (Compile.encodeTape (s.set dst (State.get s src))
         ++ (res_in ++ List.replicate (State.get s dst).length 0)).length
       = (Compile.encodeTape s ++ res_in).length + (State.get s src).length := by
     have hbal := Compile.encodeTape_set_length s dst (State.get s src) hdst
     simp only [List.length_append, List.length_replicate] at hbal ⊢
-    omega
+    exact Compile.len_balance hbal
   have hnav_le : ClearGadget.navSteps
         ((List.take src (s.set dst ([] : List Nat))).map Compile.shiftReg)
       ≤ 2 * (Compile.encodeTape s ++ res_in).length + 1 := by
-    have h := ClearGadget.navSteps_le
-      ((List.take src (s.set dst ([] : List Nat))).map Compile.shiftReg)
-    have hlen := congrArg List.length hdecomp
-    rw [hL1] at hlen
-    rw [Compile.regBlocks_map_shiftReg] at h
-    simp only [List.length_cons, List.length_append, Compile.regBlocks_map_shiftReg] at hlen
-    have hsplitq : (Compile.encodeTape s ++ res_in).length
-        = (Compile.encodeTape s).length + res_in.length := by rw [List.length_append]
-    omega
-  have hn_le : (State.get s src).length + 3 ≤ (Compile.encodeTape s ++ res_in).length := by
-    have hdec := congrArg List.length (Compile.encodeTape_reg_decomp_at s src hsrc).2
-    simp only [List.length_append, List.length_cons, Compile.shiftReg, List.length_map,
-      List.length_nil] at hdec
-    rw [List.length_append]
-    omega
+    have h := Compile.nav_le_of_decomp hdecomp
+    rwa [hL1] at h
+  have hn_le : (State.get s src).length + 3 ≤ (Compile.encodeTape s ++ res_in).length :=
+    Compile.reg_len_add_three_le s src hsrc res_in
   have hbridge1 : 9 * (Compile.encodeTape s ++ res_in).length
       ≤ 9 * (Compile.encodeTape s ++ res_in).length * (Compile.encodeTape s ++ res_in).length :=
-    Nat.le_mul_of_pos_right _ (by omega)
+    Nat.le_mul_of_pos_right _
+      (Nat.lt_of_lt_of_le (by decide) (le_trans (Nat.le_add_left 3 _) hn_le))
   have hinner : 5 * (Compile.encodeTape (s.set dst (State.get s src))
         ++ (res_in ++ List.replicate (State.get s dst).length 0)).length + 23
       ≤ 9 * (Compile.encodeTape s ++ res_in).length * (Compile.encodeTape s ++ res_in).length
         + 9 * (Compile.encodeTape s ++ res_in).length + 30 := by
-    rw [hLF]; omega
+    rw [hLF]; exact Compile.region_inner_le hn_le hbridge1
   have hloop2 : tl ≤ ((State.get s src).length + 1)
       * (9 * (Compile.encodeTape s ++ res_in).length * (Compile.encodeTape s ++ res_in).length
         + 9 * (Compile.encodeTape s ++ res_in).length + 30) :=
@@ -2711,12 +2826,11 @@ theorem Compile.opCopy_run (s : State) (dst src : Var) (hne : dst ≠ src)
     ring
   refine ⟨_, hjrun, hjtraj, ?_⟩
   rw [hexpand]
-  have hHF3 := hHF2
   have hf_le : (Compile.encodeTape (s.set dst (State.get s src))).length
       ≤ (Compile.encodeTape (s.set dst (State.get s src))
           ++ (res_in ++ List.replicate (State.get s dst).length 0)).length := by
-    rw [List.length_append]; omega
-  omega
+    rw [List.length_append]; exact Nat.le_add_right _ _
+  exact Compile.region_budget hclear_le hnav_le hloop2 hHF2 hf_le hLF hn_le
 
 /-! ### `tail` op run lemmas: `skipReadTM` steps, the offset cursor loop,
 the branch stage, and the per-op assemblies. -/
@@ -2861,9 +2975,10 @@ theorem Compile.tailLoop_run (s : State) (dst src : Var)
     intro k hk
     have h1 := Compile.encodeTape_set_length s dst (cs.take k) hdst
     have h2 := Compile.encodeTape_set_length s dst cs hdst
-    have h3 : (cs.take k).length = k := by rw [List.length_take]; omega
+    have h3 : (cs.take k).length = k := by
+      rw [List.length_take, Nat.min_eq_left (le_of_le_of_eq hk hm)]
     simp only [List.length_append]
-    omega
+    exact Compile.tail_len_mono h1 h2 h3 (le_of_le_of_eq hk hm)
   -- ### done contract at `T 0` (all of `cs` copied; cursor on src's delimiter).
   have hget_src_set : State.get (s.set dst cs) src = b₀ :: cs := by
     rw [Compile.get_set_ne s dst cs src hdst (Ne.symm hne), hsplit]
@@ -2903,7 +3018,8 @@ theorem Compile.tailLoop_run (s : State) (dst src : Var)
       t ≤ 5 * (Compile.encodeTape (s.set dst cs) ++ res).length + 21 := by
     intro j hj
     -- the cursor sits at bit `m − j − 1` of `cs` (cell `1 + (m − j − 1)` of src).
-    have hk₀ : m - (j + 1) < cs.length := by omega
+    have hk₀ : m - (j + 1) < cs.length :=
+      lt_of_lt_of_eq (Nat.sub_lt (Nat.lt_of_le_of_lt (Nat.zero_le _) hj) (Nat.succ_pos j)) hm
     have hsplit_j : State.get (s.set dst (cs.take (m - (j + 1)))) src
         = (b₀ :: cs.take (m - (j + 1))) ++ cs[m - (j + 1)] :: cs.drop (m - (j + 1) + 1) := by
       rw [Compile.get_set_ne s dst _ src hdst (Ne.symm hne), hsplit]
@@ -2923,21 +3039,20 @@ theorem Compile.tailLoop_run (s : State) (dst src : Var)
       rw [Compile.get_set_eq s dst _ hdst, Compile.set_set s dst _ _ hdst,
           show cs.take (m - (j + 1)) ++ [cs[m - (j + 1)]] = cs.take (m - (j + 1) + 1) from by
             rw [List.take_add_one, List.getElem?_eq_getElem hk₀]; rfl,
-          show m - (j + 1) + 1 = m - j from by omega]
+          Compile.sub_succ_add_one hj]
     rw [hstate_eq] at hrun hbnd
     -- align the heads with `T (j+1)` / `T j`.
     have hhead_in : 1 + (Compile.encodeRegs ((s.set dst
           (cs.take (m - (j + 1)))).take src)).length + (b₀ :: cs.take (m - (j + 1))).length
         = 1 + (Compile.encodeRegs ((s.set dst
           (cs.take (m - (j + 1)))).take src)).length + (m - (j + 1)) + 1 := by
-      simp only [List.length_cons, List.length_take]
-      omega
+      exact Compile.add_len_cons_take (Nat.le_of_lt hk₀)
     have hhead_out : 1 + (Compile.encodeRegs ((s.set dst
           (cs.take (m - j))).take src)).length + (b₀ :: cs.take (m - (j + 1))).length + 1
         = 1 + (Compile.encodeRegs ((s.set dst
           (cs.take (m - j))).take src)).length + (m - j) + 1 := by
-      simp only [List.length_cons, List.length_take]
-      omega
+      rw [List.length_cons, List.length_take, Nat.min_eq_left (Nat.le_of_lt hk₀)]
+      exact Compile.add_sub_succ_add_one_add_one hj
     rw [hhead_in, hhead_out] at hrun
     rw [hhead_in] at htraj
     refine ⟨t, ?_, ?_, ?_⟩
@@ -2947,19 +3062,19 @@ theorem Compile.tailLoop_run (s : State) (dst src : Var)
     · rw [show (Compile.copyBodyTM dst).start = 0 from rfl]
       simp only [hTdef]
       exact htraj
-    · have hmono := hLen_le (m - j) (by omega)
-      omega
+    · exact le_trans hbnd (Nat.add_le_add_right
+        (Nat.mul_le_mul_left 5 (hLen_le (m - j) (Nat.sub_le m j))) 21)
   -- ### assemble with `loopTM_run` / `loopTM_no_early_halt`.
   set tIter : Nat → Nat := fun j => if hj : j < m then (hiter_ex j hj).choose else 0
     with htIter
   have h_ne_exits : Compile.copyBody_exitDone dst ≠ Compile.copyBody_exitLoop dst := by
-    show (54 + 6 * dst : Nat) ≠ 29 + 3 * dst; omega
+    show (54 + 6 * dst : Nat) ≠ 29 + 3 * dst; exact Compile.copyBody_exits_ne dst
   have h_done_lt : Compile.copyBody_exitDone dst < (Compile.copyBodyTM dst).states := by
     rw [Compile.copyBodyTM_states]
-    show (54 + 6 * dst : Nat) < 55 + 6 * dst; omega
+    show (54 + 6 * dst : Nat) < 55 + 6 * dst; exact Nat.add_lt_add_right (by decide) _
   have h_loop_lt : Compile.copyBody_exitLoop dst < (Compile.copyBodyTM dst).states := by
     rw [Compile.copyBodyTM_states]
-    show (29 + 3 * dst : Nat) < 55 + 6 * dst; omega
+    show (29 + 3 * dst : Nat) < 55 + 6 * dst; exact Compile.copyBody_exitLoop_lt dst
   have h_iter_full : ∀ j, j < m →
       runFlatTM (tIter j) (Compile.copyBodyTM dst)
           { state_idx := (Compile.copyBodyTM dst).start, tapes := [T (j + 1)] }
@@ -2980,7 +3095,7 @@ theorem Compile.tailLoop_run (s : State) (dst src : Var)
     intro j hj
     have hb := (hiter_ex j hj).choose_spec.2.2
     simp only [htIter, dif_pos hj]
-    omega
+    exact Nat.succ_le_succ (Nat.le_succ_of_le hb)
   have hmain := loopTM_run (Compile.copyBodyTM dst) (Compile.copyBody_exitDone dst)
     (Compile.copyBody_exitLoop dst) (Compile.copyBodyTM_valid dst) h_done_lt h_loop_lt
     h_ne_exits T h_sym tIter 2 h_done_full m h_iter_full
@@ -3005,7 +3120,8 @@ theorem Compile.tailLoop_run (s : State) (dst src : Var)
     have hh := hmain_traj k hk ck hck
     exact ⟨ClearGadget.ne_of_not_halting hexit_halt hh, hh⟩
   · exact Compile.loopBudget_le tIter 2
-      (5 * (Compile.encodeTape (s.set dst cs) ++ res).length + 23) m (by omega) h_iter_bnd
+      (5 * (Compile.encodeTape (s.set dst cs) ++ res).length + 23) m
+      (le_trans (by decide) (Nat.le_add_left 23 _)) h_iter_bnd
 
 /-- **The `tail` branch stage (`tailBranchTM dst`).** Entered with `dst`
 pre-cleared and the head ON register `src`'s first cell, it lands at the kept
@@ -3409,9 +3525,9 @@ theorem Compile.opTail_run (s : State) (dst src : Var) (hne : dst ≠ src)
   have hexit : (Compile.opTail dst src).exit = Compile.tailRegionFullTM_exit dst src := by
     rw [Compile.opTail, if_neg hne]
   have hstart : (Compile.opTail dst src).M.start = 0 := by
-    rw [hM, joinTwoHalts_start]
-    show (ClearGadget.navigateToRegTM dst).start = 0
-    exact ClearGadget.navigateToRegTM_start dst
+    rw [hM, joinTwoHalts_start, Compile.tailRegionFullTM, composeFlatTM_start,
+      composeFlatTM_start, composeFlatTM_start]
+    exact ClearGadget.clearRegionTM_start dst
   have hinit : initFlatConfig (Compile.opTail dst src).M [Compile.encodeTape s ++ res_in]
       = { state_idx := 0, tapes := [([], 0, Compile.encodeTape s ++ res_in)] } := by
     simp only [initFlatConfig, hstart, List.map_cons, List.map_nil]
@@ -3489,18 +3605,14 @@ theorem Compile.opTail_run (s : State) (dst src : Var) (hne : dst ≠ src)
   have hHF2 : 1 + (Compile.encodeRegs ((s.set dst (State.get s src).tail).take src)).length
         + (State.get s src).length + 2
       ≤ (Compile.encodeTape (s.set dst (State.get s src).tail)).length := by
-    have hdec := congrArg List.length
-      (Compile.encodeTape_reg_decomp_at (s.set dst (State.get s src).tail) src hsrc₂).2
-    rw [hget₂_src] at hdec
-    simp only [List.length_append, List.length_cons, Compile.shiftReg, List.length_map,
-      List.length_nil] at hdec
-    omega
+    have h := Compile.cursor_end_le _ src hsrc₂
+    rwa [hget₂_src] at h
   have hTF_lt4 : ∀ x ∈ Compile.encodeTape (s.set dst (State.get s src).tail)
       ++ (res_in ++ List.replicate (State.get s dst).length 0), x < 4 :=
     Compile.encodeTape_append_res_lt_four _ _ hbit₂ hres₁
   have h0F : 0 < (Compile.encodeTape (s.set dst (State.get s src).tail)
       ++ (res_in ++ List.replicate (State.get s dst).length 0)).length := by
-    rw [List.length_append, Compile.encodeTape_length]; omega
+    rw [List.length_append, Compile.encodeTape_length]; exact Compile.pos_add_two_add _ _
   have htargetF : (Compile.encodeTape (s.set dst (State.get s src).tail)
       ++ (res_in ++ List.replicate (State.get s dst).length 0)).get ⟨0, h0F⟩ = 3 := by
     have hkey : (Compile.encodeTape (s.set dst (State.get s src).tail)
@@ -3518,14 +3630,14 @@ theorem Compile.opTail_run (s : State) (dst src : Var) (hne : dst ≠ src)
         (Compile.encodeTape (s.set dst (State.get s src).tail)
           ++ (res_in ++ List.replicate (State.get s dst).length 0)).get ⟨i, h⟩ ≠ 3 := by
     intro i hi0 hile
-    have hi1 : i + 1 < (Compile.encodeTape (s.set dst (State.get s src).tail)).length := by
-      omega
+    have hi1 : i + 1 < (Compile.encodeTape (s.set dst (State.get s src).tail)).length :=
+      Compile.succ_lt_of_le_of_add_two_le hile hHF2
+    have hilt_e : i < (Compile.encodeTape (s.set dst (State.get s src).tail)).length :=
+      Nat.lt_of_succ_lt hi1
     have hlt : i < (Compile.encodeTape (s.set dst (State.get s src).tail)
-        ++ (res_in ++ List.replicate (State.get s dst).length 0)).length := by
-      rw [List.length_append]; omega
+        ++ (res_in ++ List.replicate (State.get s dst).length 0)).length :=
+      Compile.lt_length_append_of_lt hilt_e
     refine ⟨hlt, ?_⟩
-    have hilt_e : i < (Compile.encodeTape (s.set dst (State.get s src).tail)).length := by
-      omega
     have hkey : (Compile.encodeTape (s.set dst (State.get s src).tail)
           ++ (res_in ++ List.replicate (State.get s dst).length 0))[i]?
         = some ((Compile.encodeTape (s.set dst (State.get s src).tail)).get ⟨i, hilt_e⟩) := by
@@ -3544,13 +3656,13 @@ theorem Compile.opTail_run (s : State) (dst src : Var) (hne : dst ≠ src)
       ++ (res_in ++ List.replicate (State.get s dst).length 0)) h0F htargetF
     (1 + (Compile.encodeRegs ((s.set dst (State.get s src).tail).take src)).length
       + (State.get s src).length)
-    (by rw [List.length_append]; omega) hcellsF
+    (Compile.lt_length_append_of_lt (Compile.lt_of_add_two_le hHF2)) hcellsF
   have hrew_traj := ScanLeft.scanLeft_no_early_halt 4 3 []
     (Compile.encodeTape (s.set dst (State.get s src).tail)
       ++ (res_in ++ List.replicate (State.get s dst).length 0))
     (1 + (Compile.encodeRegs ((s.set dst (State.get s src).tail).take src)).length
       + (State.get s src).length)
-    (by rw [List.length_append]; omega) hcellsF
+    (Compile.lt_length_append_of_lt (Compile.lt_of_add_two_le hHF2)) hcellsF
   -- ### level C1: clear ⨾ navigate
   have hT1_lt4 : ∀ x ∈ Compile.encodeTape (s.set dst ([] : List Nat))
       ++ (res_in ++ List.replicate (State.get s dst).length 0), x < 4 :=
@@ -3566,12 +3678,12 @@ theorem Compile.opTail_run (s : State) (dst src : Var) (hne : dst ≠ src)
   have hexC1_lt : ClearGadget.clearRegionTM_exit dst < (ClearGadget.clearRegionTM dst).states := by
     rw [ClearGadget.clearRegionTM_states]
     show (ClearGadget.clearBodyRawTM dst).states < (ClearGadget.clearBodyRawTM dst).states + 1
-    omega
+    exact Nat.lt_succ_self _
   have hC1run := composeFlatTM_run (ClearGadget.clearRegionTM_valid dst)
     (ClearGadget.navigateToRegTM_valid src) hexC1_lt
     { state_idx := 0, tapes := [([], 0, Compile.encodeTape s ++ res_in)] }
     (by show (0 : Nat) < (ClearGadget.clearRegionTM dst).states
-        rw [ClearGadget.clearRegionTM_states]; omega)
+        rw [ClearGadget.clearRegionTM_states]; exact Nat.zero_lt_succ _)
     [] 0 (Compile.encodeTape (s.set dst ([] : List Nat))
       ++ (res_in ++ List.replicate (State.get s dst).length 0))
     hsymC1 hclear_run hclear_traj
@@ -3581,7 +3693,7 @@ theorem Compile.opTail_run (s : State) (dst src : Var) (hne : dst ≠ src)
     (ClearGadget.navigateToRegTM_valid src) hexC1_lt
     { state_idx := 0, tapes := [([], 0, Compile.encodeTape s ++ res_in)] }
     (by show (0 : Nat) < (ClearGadget.clearRegionTM dst).states
-        rw [ClearGadget.clearRegionTM_states]; omega)
+        rw [ClearGadget.clearRegionTM_states]; exact Nat.zero_lt_succ _)
     [] 0 (Compile.encodeTape (s.set dst ([] : List Nat))
       ++ (res_in ++ List.replicate (State.get s dst).length 0))
     hsymC1 hclear_run hclear_traj
@@ -3613,8 +3725,7 @@ theorem Compile.opTail_run (s : State) (dst src : Var) (hne : dst ≠ src)
       < (composeFlatTM (ClearGadget.clearRegionTM dst) (ClearGadget.navigateToRegTM src)
           (ClearGadget.clearRegionTM_exit dst)).states := by
     rw [composeFlatTM_states]
-    have := ClearGadget.navigateToRegTM_exit_lt src
-    omega
+    exact Nat.add_lt_add_left (ClearGadget.navigateToRegTM_exit_lt src) _
   have hC2run := composeFlatTM_run
     (composeFlatTM_valid _ _ _ (ClearGadget.clearRegionTM_valid dst)
       (ClearGadget.navigateToRegTM_valid src) hexC1_lt
@@ -3622,7 +3733,8 @@ theorem Compile.opTail_run (s : State) (dst src : Var) (hne : dst ≠ src)
     (Compile.tailBranchTM_valid dst) hexC2_lt
     { state_idx := 0, tapes := [([], 0, Compile.encodeTape s ++ res_in)] }
     (by show (0 : Nat) < (composeFlatTM _ _ _).states
-        rw [composeFlatTM_states, ClearGadget.clearRegionTM_states]; omega)
+        rw [composeFlatTM_states, ClearGadget.clearRegionTM_states]
+        exact Compile.pos_add_one_add _ _)
     [] (1 + (Compile.encodeRegs (List.take src (s.set dst ([] : List Nat)))).length)
     (Compile.encodeTape (s.set dst ([] : List Nat))
       ++ (res_in ++ List.replicate (State.get s dst).length 0))
@@ -3639,7 +3751,8 @@ theorem Compile.opTail_run (s : State) (dst src : Var) (hne : dst ≠ src)
     (Compile.tailBranchTM_valid dst) hexC2_lt
     { state_idx := 0, tapes := [([], 0, Compile.encodeTape s ++ res_in)] }
     (by show (0 : Nat) < (composeFlatTM _ _ _).states
-        rw [composeFlatTM_states, ClearGadget.clearRegionTM_states]; omega)
+        rw [composeFlatTM_states, ClearGadget.clearRegionTM_states]
+        exact Compile.pos_add_one_add _ _)
     [] (1 + (Compile.encodeRegs (List.take src (s.set dst ([] : List Nat)))).length)
     (Compile.encodeTape (s.set dst ([] : List Nat))
       ++ (res_in ++ List.replicate (State.get s dst).length 0))
@@ -3654,7 +3767,7 @@ theorem Compile.opTail_run (s : State) (dst src : Var) (hne : dst ≠ src)
       = (ClearGadget.clearRegionTM dst).states + (2 + 3 * src) + (58 + 6 * dst) := by
     rw [composeFlatTM_states, ClearGadget.navigateToRegTM_states,
         Compile.tailBranch_keptExit_eq]
-    omega
+    exact Nat.add_comm _ _
   rw [heq2] at hC2run
   have hC2halt : (composeFlatTM
         (composeFlatTM (ClearGadget.clearRegionTM dst) (ClearGadget.navigateToRegTM src)
@@ -3708,7 +3821,7 @@ theorem Compile.opTail_run (s : State) (dst src : Var) (hne : dst ≠ src)
             + ClearGadget.navigateToRegTM_exit src)).states := by
     rw [composeFlatTM_states, composeFlatTM_states, ClearGadget.navigateToRegTM_states,
         Compile.tailBranchTM_states]
-    omega
+    exact Nat.add_lt_add_left (Nat.add_lt_add_right (by decide) _) _
   have hC3run := composeFlatTM_run
     (composeFlatTM_valid _ _ _
       (composeFlatTM_valid _ _ _ (ClearGadget.clearRegionTM_valid dst)
@@ -3721,7 +3834,7 @@ theorem Compile.opTail_run (s : State) (dst src : Var) (hne : dst ≠ src)
     { state_idx := 0, tapes := [([], 0, Compile.encodeTape s ++ res_in)] }
     (by show (0 : Nat) < (composeFlatTM _ _ _).states
         rw [composeFlatTM_states, composeFlatTM_states, ClearGadget.clearRegionTM_states]
-        omega)
+        exact Nat.lt_of_lt_of_le (Compile.pos_add_one_add _ _) (Nat.le_add_right _ _))
     [] (1 + (Compile.encodeRegs ((s.set dst (State.get s src).tail).take src)).length
       + (State.get s src).length)
     (Compile.encodeTape (s.set dst (State.get s src).tail)
@@ -3743,7 +3856,7 @@ theorem Compile.opTail_run (s : State) (dst src : Var) (hne : dst ≠ src)
     { state_idx := 0, tapes := [([], 0, Compile.encodeTape s ++ res_in)] }
     (by show (0 : Nat) < (composeFlatTM _ _ _).states
         rw [composeFlatTM_states, composeFlatTM_states, ClearGadget.clearRegionTM_states]
-        omega)
+        exact Nat.lt_of_lt_of_le (Compile.pos_add_one_add _ _) (Nat.le_add_right _ _))
     [] (1 + (Compile.encodeRegs ((s.set dst (State.get s src).tail).take src)).length
       + (State.get s src).length)
     (Compile.encodeTape (s.set dst (State.get s src).tail)
@@ -3764,7 +3877,7 @@ theorem Compile.opTail_run (s : State) (dst src : Var) (hne : dst ≠ src)
         Compile.tailBranchTM_states]
     show (1 : Nat) + ((ClearGadget.clearRegionTM dst).states + (2 + 3 * src) + (60 + 6 * dst))
         = (ClearGadget.clearRegionTM dst).states + (2 + 3 * src) + (60 + 6 * dst) + 1
-    omega
+    exact Nat.add_comm _ _
   rw [heq3] at hC3run
   -- ### demote the boundary halt (joinTwoHalts) and conclude
   obtain ⟨hjrun, hjtraj⟩ := Compile.joinTwoHalts_reaches_kept
@@ -3781,47 +3894,36 @@ theorem Compile.opTail_run (s : State) (dst src : Var) (hne : dst ≠ src)
     have hbal := Compile.encodeTape_set_length s dst [] hdst
     simp only [List.length_append, List.length_replicate, List.length_nil,
       Nat.add_zero] at hbal ⊢
-    omega
+    exact Compile.len_balance_nil hbal
   have hLF : (Compile.encodeTape (s.set dst (State.get s src).tail)
         ++ (res_in ++ List.replicate (State.get s dst).length 0)).length
       = (Compile.encodeTape s ++ res_in).length + (State.get s src).tail.length := by
     have hbal := Compile.encodeTape_set_length s dst (State.get s src).tail hdst
     simp only [List.length_append, List.length_replicate] at hbal ⊢
-    omega
+    exact Compile.len_balance hbal
   have htail_le : (State.get s src).tail.length ≤ (State.get s src).length := by
-    have h : (State.get s src).tail.length = (State.get s src).length - 1 := List.length_tail
-    omega
+    rw [List.length_tail]; exact Nat.sub_le _ _
   have hnav_le : ClearGadget.navSteps
         ((List.take src (s.set dst ([] : List Nat))).map Compile.shiftReg)
       ≤ 2 * (Compile.encodeTape s ++ res_in).length + 1 := by
-    have h := ClearGadget.navSteps_le
-      ((List.take src (s.set dst ([] : List Nat))).map Compile.shiftReg)
-    have hlen := congrArg List.length hdecomp
-    rw [hL1] at hlen
-    rw [Compile.regBlocks_map_shiftReg] at h
-    simp only [List.length_cons, List.length_append, Compile.regBlocks_map_shiftReg] at hlen
-    have hsplitq : (Compile.encodeTape s ++ res_in).length
-        = (Compile.encodeTape s).length + res_in.length := by rw [List.length_append]
-    omega
-  have hn_le : (State.get s src).length + 3 ≤ (Compile.encodeTape s ++ res_in).length := by
-    have hdec := congrArg List.length (Compile.encodeTape_reg_decomp_at s src hsrc).2
-    simp only [List.length_append, List.length_cons, Compile.shiftReg, List.length_map,
-      List.length_nil] at hdec
-    rw [List.length_append]
-    omega
+    have h := Compile.nav_le_of_decomp hdecomp
+    rwa [hL1] at h
+  have hn_le : (State.get s src).length + 3 ≤ (Compile.encodeTape s ++ res_in).length :=
+    Compile.reg_len_add_three_le s src hsrc res_in
   have hbridge1 : 9 * (Compile.encodeTape s ++ res_in).length
       ≤ 9 * (Compile.encodeTape s ++ res_in).length * (Compile.encodeTape s ++ res_in).length :=
-    Nat.le_mul_of_pos_right _ (by omega)
+    Nat.le_mul_of_pos_right _
+      (Nat.lt_of_lt_of_le (by decide) (le_trans (Nat.le_add_left 3 _) hn_le))
   have hinner : 5 * (Compile.encodeTape (s.set dst (State.get s src).tail)
         ++ (res_in ++ List.replicate (State.get s dst).length 0)).length + 23
       ≤ 9 * (Compile.encodeTape s ++ res_in).length * (Compile.encodeTape s ++ res_in).length
         + 9 * (Compile.encodeTape s ++ res_in).length + 30 := by
-    rw [hLF]; omega
+    rw [hLF]
+    exact Compile.region_inner_le (le_trans (Nat.add_le_add_right htail_le 3) hn_le) hbridge1
   have hbranch2 : tb ≤ (State.get s src).length
       * (9 * (Compile.encodeTape s ++ res_in).length * (Compile.encodeTape s ++ res_in).length
-        + 9 * (Compile.encodeTape s ++ res_in).length + 30) + 3 := by
-    have hmul := Nat.mul_le_mul_left (State.get s src).length hinner
-    omega
+        + 9 * (Compile.encodeTape s ++ res_in).length + 30) + 3 :=
+    le_trans hbr_le (Nat.add_le_add_right (Nat.mul_le_mul_left _ hinner) 3)
   have hexpand : (9 * (Compile.encodeTape s ++ res_in).length
         * (Compile.encodeTape s ++ res_in).length
         + 9 * (Compile.encodeTape s ++ res_in).length + 30) * ((State.get s src).length + 2)
@@ -3838,5 +3940,5 @@ theorem Compile.opTail_run (s : State) (dst src : Var) (hne : dst ≠ src)
   have hf_le : (Compile.encodeTape (s.set dst (State.get s src).tail)).length
       ≤ (Compile.encodeTape (s.set dst (State.get s src).tail)
           ++ (res_in ++ List.replicate (State.get s dst).length 0)).length := by
-    rw [List.length_append]; omega
-  omega
+    rw [List.length_append]; exact Nat.le_add_right _ _
+  exact Compile.region_budget_tail hclear_le hnav_le hbranch2 hHF2 hf_le hLF htail_le hn_le

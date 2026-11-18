@@ -826,6 +826,12 @@ theorem Compile.paddedBitDecider_run (c : Cmd) (s : State) (b : Nat) (k : Nat)
     (Compile.padRegsTM_run K s hbitst) (Compile.padRegsTM_traj K s hbitst)
     hrun2 hhalt2
   obtain ⟨hcrun, hchalt⟩ := hcomp
+  have hinit : initFlatConfig (Compile.paddedBitDeciderTM c k) [Compile.encodeTape s]
+      = initFlatConfig (Compile.padRegsTM K) [Compile.encodeTape s] := by
+    unfold initFlatConfig
+    rw [show (Compile.paddedBitDeciderTM c k).start = (Compile.padRegsTM K).start from
+      composeFlatTM_start _ _ _]
+  rw [← hinit] at hcrun
   refine ⟨{ state_idx := cfg2.state_idx + (Compile.padRegsTM K).states,
             tapes := cfg2.tapes }, hcrun, hchalt, ?_⟩
   rw [hstate2]
@@ -943,6 +949,12 @@ theorem Compile.paddedCompute_run (c : Cmd) (s : State) (k : Nat)
     (Compile.padRegsTM_run K s hbitst) (Compile.padRegsTM_traj K s hbitst)
     hrun2 hhalt2
   obtain ⟨hcrun, hchalt⟩ := hcomp
+  have hinit : initFlatConfig (Compile.paddedComputeTM c k) [Compile.encodeTape s]
+      = initFlatConfig (Compile.padRegsTM K) [Compile.encodeTape s] := by
+    unfold initFlatConfig
+    rw [show (Compile.paddedComputeTM c k).start = (Compile.padRegsTM K).start from
+      composeFlatTM_start _ _ _]
+  rw [← hinit] at hcrun
   refine ⟨res, hres, ?_, hchalt⟩
   -- pad the composed run out to the (poly) stated budget
   obtain ⟨kpad, hkpad⟩ := Nat.le.dest ht1

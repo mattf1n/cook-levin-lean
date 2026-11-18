@@ -2653,10 +2653,12 @@ theorem Compile.testMachineRawM_nomatch_is_halt (sc1 sc2 : Var) :
 theorem Compile.testMachineRawM_done_is_halt (sc1 sc2 : Var) :
     (Compile.testMachineRawM sc1 sc2).halt[Compile.testMachineRawM_done sc1 sc2]? = some true := by
   rw [Compile.testMachineRawM_done, Compile.testMachineRawM]
-  exact Compile.branchComposeFlatTM_M3_halt_intro
+  have h := Compile.branchComposeFlatTM_M3_halt_intro
     (Compile.bothNonemptyM sc1 sc2) (Compile.bitCompareM sc1 sc2) Compile.idTM
     (Compile.bothNonemptyM_exit_yes sc1 sc2) (Compile.bothNonemptyM_exit_no sc1 sc2) 0
     (Compile.bitCompareM_valid sc1 sc2) (show Compile.idTM.halt[(0 : Nat)]? = some true from rfl)
+  rw [Nat.add_zero] at h
+  exact h
 
 /-- **The clean 2-exit decision** = merge NOMATCH + DONE_a of the raw machine. -/
 def Compile.testMachine (sc1 sc2 : Var) : FlatTM :=
@@ -2767,11 +2769,13 @@ theorem Compile.compareBodyTM_exitLoop_is_halt (sc1 sc2 : Var) :
 theorem Compile.compareBodyTM_exitDone_is_halt (sc1 sc2 : Var) :
     (Compile.compareBodyTM sc1 sc2).halt[Compile.compareBodyTM_exitDone sc1 sc2]? = some true := by
   rw [Compile.compareBodyTM_exitDone, Compile.compareBodyTM]
-  exact Compile.branchComposeFlatTM_M3_halt_intro
+  have h := Compile.branchComposeFlatTM_M3_halt_intro
     (Compile.testMachine sc1 sc2) (Compile.iterTailsTM sc1 sc2) Compile.idTM
     (Compile.testMachine_exit_iter sc1 sc2) (Compile.testMachine_exit_done sc1 sc2) 0
     (Compile.iterTailsTM_valid sc1 sc2)
     (show Compile.idTM.halt[(0 : Nat)]? = some true from rfl)
+  rw [Nat.add_zero] at h
+  exact h
 
 def Compile.compareLoopTM (sc1 sc2 : Var) : FlatTM :=
   loopTM (Compile.compareBodyTM sc1 sc2)

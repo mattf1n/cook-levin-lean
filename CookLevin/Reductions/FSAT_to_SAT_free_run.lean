@@ -767,6 +767,21 @@ theorem budgetBody_fvar (s : State) (v : Nat) (r : List Nat) (bud t : Nat) (hbud
   · rw [State.get_set_eq, hRBUD, tail_replicate_succ]; simp
   · rw [State.get_set_ne _ _ _ _ (show T ≠ BUD by decide), hRT, ← List.replicate_succ']
 
+/-- A frozen `min` stays frozen one step later. -/
+private theorem min_succ_eq {i fs : Nat} (h : min i fs = fs) : min (i + 1) fs = min i fs := by
+  omega
+
+/-- A nonempty forest of pending subtrees (`a = b + c`, `1 ≤ b`) pins `i < fs`. -/
+private theorem cons_min_facts {a b c i fs : Nat} (hcons : a + min i fs = fs)
+    (hsum : a = b + c) (hb : 1 ≤ b) :
+    i < fs ∧ min i fs = i ∧ min (i + 1) fs = i + 1 := by
+  omega
+
+/-- The Dyck size bookkeeping after one `tokForest` step. -/
+private theorem forest_cons_sum {t r g a m i fs : Nat} (ht : t + 1 = r + g)
+    (hsum : a = g + r) (hcons : a + m = fs) (hm : m = i) : t + (i + 1) = fs := by
+  omega
+
 /-! ## The budget-scan loop assembly (`subtreeScan_run`, the Dyck-invariant fold) -/
 
 /-- **The arity-budget scan loop.** Starting from `SCAN = serF g ++ rest`,
@@ -791,7 +806,6 @@ theorem subtreeScan_run (u : State) (g : formula) (rest : List Nat)
     unfold subtreeScan
     rw [Cmd.eval_seq, Cmd.eval_op, Op.eval, hSCAN, Cmd.eval_seq, Cmd.eval_op, Op.eval,
       Cmd.eval_seq, Cmd.eval_op, Op.eval, Cmd.eval_seq, Cmd.eval_op, Op.eval]
-    congr 1
     rw [hP0]
     simp only [State.get_set_eq, List.nil_append, State.set_set]
   have hP0SC2 : State.get P0 SC2 = serF g ++ rest := by
@@ -846,13 +860,13 @@ theorem subtreeScan_run (u : State) (g : formula) (rest : List Nat)
     | nil =>
         have hBUDe : State.get w BUD = [] := by rw [hwBUD, hBUD]; rfl
         have hcons' : min i (formula_size g) = formula_size g := by
-          simp only [List.map_nil, List.sum_nil, Nat.zero_add] at hcons; omega
+          simp only [List.map_nil, List.sum_nil, Nat.zero_add] at hcons; exact hcons
         refine ⟨[], ?_, ?_, ?_, ?_⟩
         · rw [budgetBody_freeze w SC2 (by decide) (by decide) hBUDe, hwSC2, hSC2]
         · rw [budgetBody_freeze w BUD (by decide) (by decide) hBUDe, hBUDe]; rfl
-        · rw [budgetBody_freeze w T (by decide) (by decide) hBUDe, hwT, hT]
-          congr 1; omega
-        · simp only [List.map_nil, List.sum_nil, Nat.zero_add]; omega
+        · rw [budgetBody_freeze w T (by decide) (by decide) hBUDe, hwT, hT, min_succ_eq hcons']
+        · simp only [List.map_nil, List.sum_nil, Nat.zero_add]
+          exact (min_succ_eq hcons').trans hcons'
     | cons g₀ gs' =>
         have hwBUD' : State.get w BUD = List.replicate (gs'.length + 1) 1 := by
           rw [hwBUD, hBUD, List.length_cons]
@@ -861,8 +875,7 @@ theorem subtreeScan_run (u : State) (g : formula) (rest : List Nat)
         have hsumdecomp : ((g₀ :: gs').map formula_size).sum
             = formula_size g₀ + (gs'.map formula_size).sum := by
           simp [List.map_cons, List.sum_cons]
-        have hmin : min i (formula_size g) = i := by omega
-        have hmin1 : min (i + 1) (formula_size g) = i + 1 := by omega
+        obtain ⟨_, hmin, hmin1⟩ := cons_min_facts hcons hsumdecomp hg0pos
         have hwT' : State.get w T = List.replicate (min i (formula_size g)) 1 := by rw [hwT, hT]
         have hSCtail : State.get w SC2 = serF g₀ ++ ((gs'.map serF).flatten ++ rest) := by
           rw [hwSC2, hSC2]; simp [List.map_cons, List.flatten_cons, List.append_assoc]
@@ -1558,22 +1571,22 @@ theorem outerLoop_run (u : State) (f : formula) (C0 T0 : List Nat)
         -- exhausted: idle step, invariant frozen
         have hSCnil : State.get w SCAN = [] := by rw [hwSC]; simp
         have hmineq : min i (formula_size f) = formula_size f := by
-          simp only [List.map_nil, List.sum_nil, Nat.zero_add] at hcons; omega
+          simp only [List.map_nil, List.sum_nil, Nat.zero_add] at hcons; exact hcons
         rw [hidle w hSCnil]
         refine ⟨[], done, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
         · rw [State.get_set_ne _ _ _ _ (show SCAN ≠ SKIP by decide),
             State.get_set_ne _ _ _ _ (show SCAN ≠ NE by decide), hwSC]
         · rw [State.get_set_ne _ _ _ _ (show K ≠ SKIP by decide),
-            State.get_set_ne _ _ _ _ (show K ≠ NE by decide), hwK]
-          congr 1; omega
+            State.get_set_ne _ _ _ _ (show K ≠ NE by decide), hwK, min_succ_eq hmineq]
         · rw [State.get_set_ne _ _ _ _ (show CNFOUT ≠ SKIP by decide),
             State.get_set_ne _ _ _ _ (show CNFOUT ≠ NE by decide), hwCN]
         · rw [State.get_set_ne _ _ _ _ (show TALLY ≠ SKIP by decide),
             State.get_set_ne _ _ _ _ (show TALLY ≠ NE by decide), hwTL]
         · rw [State.get_set_ne _ _ _ _ (show B ≠ SKIP by decide),
             State.get_set_ne _ _ _ _ (show B ≠ NE by decide), hwB]
-        · simp only [List.map_nil, List.sum_nil, Nat.zero_add]; omega
-        · rw [show min (i + 1) (formula_size f) = formula_size f from by omega]
+        · simp only [List.map_nil, List.sum_nil, Nat.zero_add]
+          exact (min_succ_eq hmineq).trans hmineq
+        · rw [(min_succ_eq hmineq).trans hmineq]
           rw [show min i (formula_size f) = formula_size f from hmineq] at hscan
           exact hscan
     | cons g₀ hs' =>
@@ -1581,12 +1594,10 @@ theorem outerLoop_run (u : State) (f : formula) (C0 T0 : List Nat)
         have hsumdec : ((g₀ :: hs').map formula_size).sum
             = formula_size g₀ + (hs'.map formula_size).sum := by
           simp [List.map_cons, List.sum_cons]
-        have hi_lt : i < formula_size f := by omega
-        have hmin : min i (formula_size f) = i := by omega
-        have hmin1 : min (i + 1) (formula_size f) = i + 1 := by omega
-        have hmle : min i (formula_size f) ≤ L := by omega
+        obtain ⟨hi_lt, hmin, hmin1⟩ := cons_min_facts hcons hsumdec hg0pos
+        have hiL : i ≤ L := Nat.le_of_lt (Nat.lt_of_lt_of_le hi_lt hfsL)
         have hwSC' : State.get w SCAN = serF g₀ ++ (hs'.map serF).flatten := by
-          rw [hwSC]; simp [List.map_cons, List.flatten_cons]
+          rw [hwSC]; simp only [List.map_cons, List.flatten_cons]
         obtain ⟨hbCN, hbTL, hbSC, hbK, hbB, _⟩ :=
           tokenBody_run w g₀ L (min i (formula_size f)) ((hs'.map serF).flatten) hwSC' hwB hwK
         refine ⟨tokForest g₀ hs', done ++ tokHead L (min i (formula_size f)) g₀,
@@ -1598,14 +1609,15 @@ theorem outerLoop_run (u : State) (f : formula) (C0 T0 : List Nat)
             ← List.replicate_add]
         · rw [hbB]
         · rw [hmin1]
-          have := tokForest_sum g₀ hs'; simp only [hsumdec] at hcons ⊢; omega
+          exact forest_cons_sum (tokForest_sum g₀ hs') hsumdec hcons hmin
         · rw [hmin] at hscan
           rw [hmin, hmin1, hscan,
             show (List.map serF (g₀ :: hs')).flatten = serF g₀ ++ (hs'.map serF).flatten from by
-              simp [List.map_cons, List.flatten_cons],
-            show L + 1 - i = (L - i) + 1 from by omega,
+              simp only [List.map_cons, List.flatten_cons],
+            show L + 1 - i = (L - i) + 1 from Nat.sub_add_comm hiL,
             scanClauses_tok L (L - i) i g₀ ((hs'.map serF).flatten),
-            tokForest_flatten, show L + 1 - (i + 1) = L - i from by omega, List.append_assoc]
+            tokForest_flatten, show L + 1 - (i + 1) = L - i from Nat.add_sub_add_right L 1 i,
+            List.append_assoc]
   have hInv := Cmd.foldlState_range_induct tokenBody IDX1 (State.get u SERF).length u M h0 hstep
   rw [Cmd.eval_forBnd]
   rw [hbound] at hInv ⊢
@@ -1841,6 +1853,11 @@ theorem buildSAT_computes (f : formula) :
   rw [(buildSAT_run f).1]
   exact Serialize.decodeD_enc ([] : cnf) (fsatToSat f)
 
+private theorem fsatToSat_size_aux (fs b n : Nat) (h1 : fs ≤ 4 * n) (h2 : b ≤ 4 * n) :
+    (3 * fs + 1) * (3 * (b + fs + 1) + 4) ≤ 300 * (n + 1) ^ 2 :=
+  le_trans (Nat.mul_le_mul (show 3 * fs + 1 ≤ 12 * n + 1 by omega)
+    (show 3 * (b + fs + 1) + 4 ≤ 24 * n + 7 by omega)) (by ring_nf; omega)
+
 /-- The output CNF's `encodable.size` is quadratically bounded in `|f|`
 (`output_size_le` fodder; via `preTseytin_size_le` with `b, |f| ≤ 4·|f|`). -/
 theorem fsatToSat_size_le (f : formula) :
@@ -1853,9 +1870,8 @@ theorem fsatToSat_size_le (f : formula) :
   have hfs4 : formula_size f ≤ 4 * n := le_trans hfs hser
   set fs := formula_size f with hfsdef
   set b := (serF f).length with hbdef
-  have hgoal : (3 * fs + 1) * (3 * (b + fs + 1) + 4) ≤ 300 * (n + 1) ^ 2 := by
-    have hbn : b ≤ 4 * n := hser
-    nlinarith [Nat.mul_le_mul hfs4 hbn, hfs4, hbn, Nat.zero_le n]
+  have hgoal : (3 * fs + 1) * (3 * (b + fs + 1) + 4) ≤ 300 * (n + 1) ^ 2 :=
+    fsatToSat_size_aux fs b n hfs4 hser
   calc encodable.size (fsatToSat f) ≤ (3 * fs + 1) * (3 * (b + fs + 1) + 4) := h
     _ ≤ 300 * (n + 1) ^ 2 := hgoal
 

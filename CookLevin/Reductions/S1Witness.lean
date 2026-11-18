@@ -523,10 +523,74 @@ theorem K2_ngm : K2.ngm = 70664962179072 := by
 theorem kindNest_ngm : kindNest.ngm = 70664962670592 := by
   rw [kindNest_eq, CmdH.ngm_fill, K2_ngm]; decide +kernel
 
-theorem K3_chk₁ : Cmd.chk 1152851116732448767 K3 = (true, 1152851118611496959, 0) := by decide +kernel
-theorem K3_chk₂ : Cmd.chk 1152851118611496959 K3 = (true, 1152851118611496959, 0) := by decide +kernel
-theorem K3_chk₃ : Cmd.chk 1152850839652532223 K3 = (true, 1152851118615691263, 0) := by decide +kernel
-theorem K3_chk₄ : Cmd.chk 1152850839648337919 K3 = (true, 1152851118611496959, 0) := by decide +kernel
+private theorem K3_eq : K3 = (pKindCmdH PKV3 PST3 PPA3 PKC3).fill resNest :=
+  (pKindCmdH_fill _ _ _ _ _).symm
+
+private theorem resNest_ngm : resNest.ngm = 70664828485632 := by decide +kernel
+
+/-- The pass on `resNest` at the seven masks with which the hole of `K3` is reached. -/
+private def tblR (m : Nat) : Bool × Nat × Nat :=
+  if m = 1152851118611496959 then (true, 1152851118611496959, 0)
+  else if m = 1152850839774167039 then (true, 1152851118678605823, 0)
+  else if m = 1152851118615691263 then (true, 1152851118615691263, 0)
+  else if m = 1152850839778361343 then (true, 1152851118682800127, 0)
+  else if m = 1152851116732448767 then (true, 1152851118611496959, 0)
+  else if m = 1152850839711252479 then (true, 1152851118615691263, 0)
+  else if m = 1152850839707058175 then (true, 1152851118611496959, 0)
+  else Cmd.chk m resNest
+
+private theorem resNest_chk₁ :
+    Cmd.chk 1152851118611496959 resNest = (true, 1152851118611496959, 0) := by decide +kernel
+private theorem resNest_chk₂ :
+    Cmd.chk 1152850839774167039 resNest = (true, 1152851118678605823, 0) := by decide +kernel
+private theorem resNest_chk₃ :
+    Cmd.chk 1152851118615691263 resNest = (true, 1152851118615691263, 0) := by decide +kernel
+private theorem resNest_chk₄ :
+    Cmd.chk 1152850839778361343 resNest = (true, 1152851118682800127, 0) := by decide +kernel
+private theorem resNest_chk₅ :
+    Cmd.chk 1152851116732448767 resNest = (true, 1152851118611496959, 0) := by decide +kernel
+private theorem resNest_chk₆ :
+    Cmd.chk 1152850839711252479 resNest = (true, 1152851118615691263, 0) := by decide +kernel
+private theorem resNest_chk₇ :
+    Cmd.chk 1152850839707058175 resNest = (true, 1152851118611496959, 0) := by decide +kernel
+
+private theorem tblR_eq : (fun m => Cmd.chk m resNest) = tblR := by
+  funext m
+  unfold tblR
+  by_cases h1 : m = 1152851118611496959
+  · rw [if_pos h1, h1]; exact resNest_chk₁
+  rw [if_neg h1]
+  by_cases h2 : m = 1152850839774167039
+  · rw [if_pos h2, h2]; exact resNest_chk₂
+  rw [if_neg h2]
+  by_cases h3 : m = 1152851118615691263
+  · rw [if_pos h3, h3]; exact resNest_chk₃
+  rw [if_neg h3]
+  by_cases h4 : m = 1152850839778361343
+  · rw [if_pos h4, h4]; exact resNest_chk₄
+  rw [if_neg h4]
+  by_cases h5 : m = 1152851116732448767
+  · rw [if_pos h5, h5]; exact resNest_chk₅
+  rw [if_neg h5]
+  by_cases h6 : m = 1152850839711252479
+  · rw [if_pos h6, h6]; exact resNest_chk₆
+  rw [if_neg h6]
+  by_cases h7 : m = 1152850839707058175
+  · rw [if_pos h7, h7]; exact resNest_chk₇
+  rw [if_neg h7]
+
+private theorem K3_chk_of (m : Nat) :
+    Cmd.chk m K3 = (pKindCmdH PKV3 PST3 PPA3 PKC3).chkH tblR 70664828485632 m := by
+  rw [K3_eq, CmdH.chk_fill, resNest_ngm, tblR_eq]
+
+theorem K3_chk₁ : Cmd.chk 1152851116732448767 K3 = (true, 1152851118611496959, 0) := by
+  rw [K3_chk_of]; decide +kernel
+theorem K3_chk₂ : Cmd.chk 1152851118611496959 K3 = (true, 1152851118611496959, 0) := by
+  rw [K3_chk_of]; decide +kernel
+theorem K3_chk₃ : Cmd.chk 1152850839652532223 K3 = (true, 1152851118615691263, 0) := by
+  rw [K3_chk_of]; decide +kernel
+theorem K3_chk₄ : Cmd.chk 1152850839648337919 K3 = (true, 1152851118611496959, 0) := by
+  rw [K3_chk_of]; decide +kernel
 
 def tbl3 (m : Nat) : Bool × Nat × Nat :=
   if m = 1152851116732448767 then (true, 1152851118611496959, 0)

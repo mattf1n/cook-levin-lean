@@ -147,15 +147,14 @@ theorem compileSeq_traj_physical_residue
   rw [hh] at hnh
   exact absurd hnh Bool.noConfusion
 
-set_option maxHeartbeats 2000000 in
 /-- **The `concat` 4-stage budget certificate.** The sum of the four per-stage
 budgets (`opCopy sb src1` over tape `L`; `opCopyAppend sb src2` over tape `L+V`;
 `opCopy dst sb` over tape `L+V`; `clear sb` over tape `L+2V`) plus the three
 `compileSeq` seams is `≤ (54L²+54L+180)·(2V+2)` — exactly the per-op contract
-budget at `cost = 2V+1` (`a = |src1|`, `b = |src2|`, `V = a+b`). Proven via the
-nonneg products `(L−a)·…`, `(L−b)·…` (cast to ℤ); worst-case headroom ~12%
-. The binding hypotheses `a ≤ L`, `b ≤ L` hold because each
-operand's length is `≤ State.size s ≤ L`. -/
+budget at `cost = 2V+1` (`a = |src1|`, `b = |src2|`, `V = a+b`). Proven by `linarith` from
+the nonneg products `a(L−b)`, `b(L−a)`, `a²(L−a)`, …, `a(a−2)²`, `a(b−2)²`, `b(b−2)²`
+(cast to ℤ); worst-case headroom ~12%. The binding hypotheses `a ≤ L`, `b ≤ L` hold
+because each operand's length is `≤ State.size s ≤ L`. -/
 private theorem Compile.concat_budget_arith (a b L : Nat) (haL : a ≤ L) (hbL : b ≤ L) :
     (9*L*L+9*L+30)*(a+2)
       + ((b+1)*(5*(L+(a+b))+23)+3*(L+(a+b))+4)
@@ -171,13 +170,13 @@ private theorem Compile.concat_budget_arith (a b L : Nat) (haL : a ≤ L) (hbL :
   have dA : (0:ℤ) ≤ (L:ℤ) - a := sub_nonneg.2 haL'
   have dB : (0:ℤ) ≤ (L:ℤ) - b := sub_nonneg.2 hbL'
   zify
-  nlinarith [mul_nonneg (mul_nonneg dA hL) ha, mul_nonneg (mul_nonneg dA ha) ha,
-    mul_nonneg (mul_nonneg dB hL) hb, mul_nonneg (mul_nonneg dB hb) hb,
-    mul_nonneg (mul_nonneg dA hL) hb, mul_nonneg (mul_nonneg dA ha) hb,
-    mul_nonneg (mul_nonneg dB ha) hb, mul_nonneg (mul_nonneg dB hL) ha,
-    mul_nonneg dA ha, mul_nonneg dB hb, mul_nonneg dA hb, mul_nonneg dB ha,
-    mul_nonneg (mul_nonneg hL hL) ha, mul_nonneg (mul_nonneg hL hL) hb,
-    mul_nonneg hL hL, hL, ha, hb]
+  linarith [mul_nonneg ha dB, mul_nonneg hb dA, mul_nonneg hL hL, mul_nonneg hL dA,
+    mul_nonneg (mul_nonneg ha ha) dA, mul_nonneg (mul_nonneg ha hb) dA,
+    mul_nonneg (mul_nonneg ha hb) dB, mul_nonneg (mul_nonneg ha hL) dA,
+    mul_nonneg (mul_nonneg ha hL) dB, mul_nonneg (mul_nonneg hb hb) dB,
+    mul_nonneg (mul_nonneg hb hL) dA, mul_nonneg (mul_nonneg hb hL) dB,
+    mul_nonneg ha (sq_nonneg ((a:ℤ) - 2)), mul_nonneg ha (sq_nonneg ((b:ℤ) - 2)),
+    mul_nonneg hb (sq_nonneg ((b:ℤ) - 2))]
 
 /-- **`opConcat` run lemma — the full 4-stage `concat` gadget.** From
 `encodeTape s ++ res_in`, the aliasing-safe scratch chain `opCopy sb src1 ⨾
@@ -405,7 +404,8 @@ theorem Compile.opConcat_run (s : State) (sb dst src1 src2 : Var)
             + ((b+1)*(5*(L+(a+b))+23)+3*(L+(a+b))+4)
             + (9*(L+(a+b))*(L+(a+b))+9*(L+(a+b))+30)*((a+b)+2)
             + (9*(L+2*(a+b))*(L+2*(a+b))+9)
-            + 3 := by gcongr
+            + 3 := Nat.add_le_add_right
+              (Nat.add_le_add (Nat.add_le_add (Nat.add_le_add hbA hbB) hbC) hbD) 3
       _ ≤ (54*L*L+54*L+180)*(2*(a+b)+2) := Compile.concat_budget_arith a b L haL hbL
       _ = (54 * L * L + 54 * L + 180) * (2 * (a + b) + 1 + 1) := by ring
 

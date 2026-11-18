@@ -1931,12 +1931,12 @@ theorem binConvert_run (k o w : Nat) (xs : List Nat) (cs : List (CCCard Nat))
     intro r hr
     have hge : ∀ m : Nat, 9 ≤ m → r ≠ m :=
       fun m hm => Nat.ne_of_lt (Nat.lt_of_lt_of_le hr hm)
-    rw [hF9 r (hge 9 (by omega)) (hge 19 (by omega)) (hge 10 (by omega))
-      (hge 14 (by omega)) (hge 23 (by omega)) (hge 11 (by omega))
-      (hge 24 (by omega)) (hge 13 (by omega)) (hge 12 (by omega))
-      (hge 15 (by omega)) (hge 16 (by omega)) (hge 26 (by omega)),
-      hu8get r (hge 11 (by omega)) (hge 17 (by omega)) (hge 12 (by omega))
-      (hge 18 (by omega)) (hge 19 (by omega)) (hge 9 (by omega))]
+    rw [hF9 r (hge 9 (by decide)) (hge 19 (by decide)) (hge 10 (by decide))
+      (hge 14 (by decide)) (hge 23 (by decide)) (hge 11 (by decide))
+      (hge 24 (by decide)) (hge 13 (by decide)) (hge 12 (by decide))
+      (hge 15 (by decide)) (hge 16 (by decide)) (hge 26 (by decide)),
+      hu8get r (hge 11 (by decide)) (hge 17 (by decide)) (hge 12 (by decide))
+      (hge 18 (by decide)) (hge 19 (by decide)) (hge 9 (by decide))]
   have hu9BOFF : State.get u9 BOFF = List.replicate (o * k) 1 := by
     rw [hF9 BOFF (by decide) (by decide) (by decide) (by decide) (by decide)
       (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
@@ -2048,11 +2048,11 @@ theorem binConvert_run (k o w : Nat) (xs : List Nat) (cs : List (CCCard Nat))
     intro r hr
     have hge : ∀ m : Nat, 9 ≤ m → r ≠ m :=
       fun m hm => Nat.ne_of_lt (Nat.lt_of_lt_of_le hr hm)
-    rw [hu17get r (hge 9 (by omega)) (hge 25 (by omega)) (hge 20 (by omega))
-      (hge 21 (by omega)) (hge 10 (by omega)) (hge 14 (by omega))
-      (hge 23 (by omega)) (hge 11 (by omega)) (hge 24 (by omega))
-      (hge 13 (by omega)) (hge 12 (by omega)) (hge 15 (by omega))
-      (hge 16 (by omega)) (hge 26 (by omega)), hu9low r hr]
+    rw [hu17get r (hge 9 (by decide)) (hge 25 (by decide)) (hge 20 (by decide))
+      (hge 21 (by decide)) (hge 10 (by decide)) (hge 14 (by decide))
+      (hge 23 (by decide)) (hge 11 (by decide)) (hge 24 (by decide))
+      (hge 13 (by decide)) (hge 12 (by decide)) (hge 15 (by decide))
+      (hge 16 (by decide)) (hge 26 (by decide)), hu9low r hr]
   have hu17BOFF : State.get u17 BOFF = List.replicate (o * k) 1 := by
     rw [hu17get BOFF (by decide) (by decide) (by decide) (by decide)
       (by decide) (by decide) (by decide) (by decide) (by decide) (by decide)
@@ -2109,7 +2109,8 @@ theorem binConvert_run (k o w : Nat) (xs : List Nat) (cs : List (CCCard Nat))
     have h3 : k * (citemsOf cs).length ≤ k * LC := Nat.mul_le_mul_left k h2
     have h4 : (encItems (citemsOf cs)).length = LC := by
       rw [encItems_citemsOf]
-    omega
+    rw [h4] at h
+    exact le_trans h (Nat.mul_le_mul_left 3 (Nat.add_le_add_right h3 LC))
   have hlenBF : (expandItems k (fitemsOf fss)).length ≤ 3 * (k * LF + LF) := by
     have h := expandItems_length_le k (fitemsOf fss)
     have h2 : (fitemsOf fss).length ≤ LF := by
@@ -2118,13 +2119,12 @@ theorem binConvert_run (k o w : Nat) (xs : List Nat) (cs : List (CCCard Nat))
     have h3 : k * (fitemsOf fss).length ≤ k * LF := Nat.mul_le_mul_left k h2
     have h4 : (encItems (fitemsOf fss)).length = LF := by
       rw [encItems_fitemsOf]
-    omega
-  set A6 := (Cmd.ifBit FLAG NumGadgets.cSkip
+    rw [h4] at h
+    exact le_trans h (Nat.mul_le_mul_left 3 (Nat.add_le_add_right h3 LF))
+  have hGuard : (Cmd.ifBit FLAG NumGadgets.cSkip
       (Cmd.op (.clear BOFF) ;; Cmd.op (.clear BWID) ;; Cmd.op (.clear BINIT) ;;
        Cmd.op (.clear BCARDS) ;; Cmd.op (.clear BFINAL) ;;
-       Cmd.op (.clear STEPS))).cost u17 with hA6
-  have hGuard : A6 ≤ 12 := by
-    rw [hA6]
+       Cmd.op (.clear STEPS))).cost u17 ≤ 12 := by
     by_cases hf : State.get u17 FLAG = [1]
     · rw [Cmd.cost_ifBit_true _ _ _ _ hf, NumGadgets.cSkip_cost]
       omega
@@ -2136,17 +2136,8 @@ theorem binConvert_run (k o w : Nat) (xs : List Nat) (cs : List (CCCard Nat))
       omega
   have hcost : binConvert.cost s0
       ≤ binBudget k o w LI LC LF := by
-    -- fold the five loop costs and the two copy lengths into opaque atoms
-    -- (`omega` whnf-times-out on the underlying state terms otherwise)
-    set A1 := (Cmd.forBnd IDXO OFFSET
-      (Cmd.op (.concat BOFF BOFF SIGMA))).cost u3 with hA1
-    set A2 := (Cmd.forBnd IDXO WIDTH
-      (Cmd.op (.concat BWID BWID SIGMA))).cost u5 with hA2
-    set A3 := (Cmd.forBnd IDXO INIT initStep).cost u8 with hA3
-    set A4 := (Cmd.forBnd IDXO CARDS sentStep).cost u11 with hA4
-    set A5 := (Cmd.forBnd IDXO FINAL sentStep).cost u15 with hA5
-    set BC := (expandItems k (citemsOf cs)).length with hBC
-    set BF := (expandItems k (fitemsOf fss)).length with hBF
+    -- the five loop costs and the two copy lengths stay as atoms of the
+    -- clean-context `binBudget_arith` (no `omega` over the state terms)
     show ((Cmd.op (.clear FLAG)) ;; _).cost s0 ≤ _
     rw [Cmd.cost_seq, Cmd.cost_op, e1, Cmd.cost_seq, Cmd.cost_op, e2,
       Cmd.cost_seq, Cmd.cost_op, e3, Cmd.cost_seq, ← hu4, Cmd.cost_seq,
@@ -2155,17 +2146,14 @@ theorem binConvert_run (k o w : Nat) (xs : List Nat) (cs : List (CCCard Nat))
       Cmd.cost_op, e10, Cmd.cost_seq, Cmd.cost_op, e11, Cmd.cost_seq, ← hu12,
       Cmd.cost_seq, Cmd.cost_op, e13, Cmd.cost_seq, Cmd.cost_op, e14,
       Cmd.cost_seq, Cmd.cost_op, e15, Cmd.cost_seq, ← hu16, Cmd.cost_seq,
-      Cmd.cost_op, e17, ← hA1, ← hA2, ← hA3, ← hA4, ← hA5, ← hA6]
-    simp only [Op.cost, hu7INIT, hu10CARDS, hu12BOUT, hu14FINAL, hu16BOUT,
-      ← hBC, ← hBF]
+      Cmd.cost_op, e17]
+    simp only [Op.cost, hu7INIT, hu10CARDS, hu12BOUT, hu14FINAL, hu16BOUT]
     unfold binBudget
-    clear_value A1 A2 A3 A4 A5 A6 BC BF
-    clear hA1 hA2 hA3 hA4 hA5 hA6 hBC hBF
     exact binBudget_arith LI LC LF
       (o * (2 * (o * k + k) + 1)) (w * (2 * (w * k + k) + 1))
       (LI * initStepBound LI k) (LC * sentStepBound LC k)
       (LF * sentStepBound LF k) (o * o) (w * w) (LI * LI) (LC * LC) (LF * LF)
-      (3 * (k * LC + LC)) (3 * (k * LF + LF)) A1 A2 A3 A4 A5 A6 BC BF
+      (3 * (k * LC + LC)) (3 * (k * LF + LF)) _ _ _ _ _ _ _ _
       hC4 hC6 hC9 hC12 hC16 hGuard hlenBC hlenBF
   -- the guard, by validity
   cases hOK : okB k xs cs fss
@@ -2215,8 +2203,8 @@ theorem binConvert_run (k o w : Nat) (xs : List Nat) (cs : List (CCCard Nat))
     · intro r hr h5
       have hge : ∀ m : Nat, 9 ≤ m → r ≠ m :=
         fun m hm => Nat.ne_of_lt (Nat.lt_of_lt_of_le hr hm)
-      rw [heval, hzlow r h5 (hge 17 (by omega)) (hge 18 (by omega))
-        (hge 19 (by omega)) (hge 20 (by omega)) (hge 21 (by omega)),
+      rw [heval, hzlow r h5 (hge 17 (by decide)) (hge 18 (by decide))
+        (hge 19 (by decide)) (hge 20 (by decide)) (hge 21 (by decide)),
         hu17low r hr]
   · -- valid: the guard is a `cSkip`
     simp only [Bool.cond_true]
@@ -2244,7 +2232,7 @@ theorem binConvert_run (k o w : Nat) (xs : List Nat) (cs : List (CCCard Nat))
       have hge : ∀ m : Nat, 9 ≤ m → r ≠ m :=
         fun m hm => Nat.ne_of_lt (Nat.lt_of_lt_of_le hr hm)
       rw [heval,
-        State.get_set_ne _ NumGadgets.SKIPR _ _ (hge 26 (by omega)),
+        State.get_set_ne _ NumGadgets.SKIPR _ _ (hge 26 (by decide)),
         hu17low r hr]
 
 /-! ## Structural fields (frame, `consLen`-freedom, op-supportedness) -/
@@ -2291,57 +2279,48 @@ private theorem binBudget_le_poly (n K O W LI LC LF : Nat)
   have hOO : O * O ≤ n * n := Nat.mul_le_mul hO hO
   have hWW : W * W ≤ n * n := Nat.mul_le_mul hW hW
   have hO1 : O * (2 * (O * K + K) + 1) ≤ n * (2 * (n * n + n) + 1) :=
-    Nat.mul_le_mul hO (by omega)
+    Nat.mul_le_mul hO (Nat.add_le_add_right (Nat.mul_le_mul_left 2 (Nat.add_le_add hOK hK)) 1)
   have hW1 : W * (2 * (W * K + K) + 1) ≤ n * (2 * (n * n + n) + 1) :=
-    Nat.mul_le_mul hW (by omega)
-  have hOe : n * (2 * (n * n + n) + 1) = 2 * (n * n * n) + 2 * (n * n) + n := by
-    ring
+    Nat.mul_le_mul hW (Nat.add_le_add_right (Nat.mul_le_mul_left 2 (Nat.add_le_add hWK hK)) 1)
   have hLILI : LI * LI ≤ n * n := Nat.mul_le_mul hLI hLI
   have hLIK : LI * K ≤ n * n := Nat.mul_le_mul hLI hK
   have hKK : K * K ≤ n * n := Nat.mul_le_mul hK hK
   have hIB : initStepBound LI K ≤ 6 * (n * n) + 13 * n + 40 := by
     unfold initStepBound
-    omega
+    refine le_trans (Nat.add_le_add_right (Nat.add_le_add (Nat.add_le_add
+      (Nat.add_le_add (Nat.add_le_add (Nat.mul_le_mul_left 4 hLILI) hLIK) hKK)
+      (Nat.mul_le_mul_left 10 hLI)) (Nat.mul_le_mul_left 3 hK)) 40) (le_of_eq ?_)
+    ring
   have hI1 : LI * initStepBound LI K ≤ n * (6 * (n * n) + 13 * n + 40) :=
     Nat.mul_le_mul hLI hIB
-  have hIe : n * (6 * (n * n) + 13 * n + 40)
-      = 6 * (n * n * n) + 13 * (n * n) + 40 * n := by ring
-  have hLCLC : LC * LC ≤ 4 * (n * n) := by
-    have := Nat.mul_le_mul hLC hLC
-    have he : 2 * n * (2 * n) = 4 * (n * n) := by ring
-    omega
-  have hLCK : LC * K ≤ 2 * (n * n) := by
-    have := Nat.mul_le_mul hLC hK
-    have he : 2 * n * n = 2 * (n * n) := by ring
-    omega
+  have hLCLC : LC * LC ≤ 4 * (n * n) :=
+    le_of_le_of_eq (Nat.mul_le_mul hLC hLC) (Nat.mul_mul_mul_comm 2 n 2 n)
+  have hLCK : LC * K ≤ 2 * (n * n) :=
+    le_of_le_of_eq (Nat.mul_le_mul hLC hK) (Nat.mul_assoc 2 n n)
   have hSBC : sentStepBound LC K ≤ 19 * (n * n) + 33 * n + 50 := by
     unfold sentStepBound
-    omega
+    refine le_trans (Nat.add_le_add_right (Nat.add_le_add (Nat.add_le_add
+      (Nat.add_le_add (Nat.add_le_add (Nat.mul_le_mul_left 4 hLCLC) hLCK) hKK)
+      (Nat.mul_le_mul_left 14 hLC)) (Nat.mul_le_mul_left 5 hK)) 50) (le_of_eq ?_)
+    ring
   have hC1 : LC * sentStepBound LC K ≤ 2 * n * (19 * (n * n) + 33 * n + 50) :=
     Nat.mul_le_mul hLC hSBC
-  have hCe : 2 * n * (19 * (n * n) + 33 * n + 50)
-      = 38 * (n * n * n) + 66 * (n * n) + 100 * n := by ring
-  have hLFLF : LF * LF ≤ 4 * (n * n) := by
-    have := Nat.mul_le_mul hLF hLF
-    have he : 2 * n * (2 * n) = 4 * (n * n) := by ring
-    omega
-  have hLFK : LF * K ≤ 2 * (n * n) := by
-    have := Nat.mul_le_mul hLF hK
-    have he : 2 * n * n = 2 * (n * n) := by ring
-    omega
+  have hLFLF : LF * LF ≤ 4 * (n * n) :=
+    le_of_le_of_eq (Nat.mul_le_mul hLF hLF) (Nat.mul_mul_mul_comm 2 n 2 n)
+  have hLFK : LF * K ≤ 2 * (n * n) :=
+    le_of_le_of_eq (Nat.mul_le_mul hLF hK) (Nat.mul_assoc 2 n n)
   have hSBF : sentStepBound LF K ≤ 19 * (n * n) + 33 * n + 50 := by
     unfold sentStepBound
-    omega
+    refine le_trans (Nat.add_le_add_right (Nat.add_le_add (Nat.add_le_add
+      (Nat.add_le_add (Nat.add_le_add (Nat.mul_le_mul_left 4 hLFLF) hLFK) hKK)
+      (Nat.mul_le_mul_left 14 hLF)) (Nat.mul_le_mul_left 5 hK)) 50) (le_of_eq ?_)
+    ring
   have hF1 : LF * sentStepBound LF K ≤ 2 * n * (19 * (n * n) + 33 * n + 50) :=
     Nat.mul_le_mul hLF hSBF
-  have hKLC : K * LC ≤ 2 * (n * n) := by
-    have := Nat.mul_le_mul hK hLC
-    have he : n * (2 * n) = 2 * (n * n) := by ring
-    omega
-  have hKLF : K * LF ≤ 2 * (n * n) := by
-    have := Nat.mul_le_mul hK hLF
-    have he : n * (2 * n) = 2 * (n * n) := by ring
-    omega
+  have hKLC : K * LC ≤ 2 * (n * n) :=
+    le_of_le_of_eq (Nat.mul_le_mul hK hLC) (Nat.mul_left_comm n 2 n)
+  have hKLF : K * LF ≤ 2 * (n * n) :=
+    le_of_le_of_eq (Nat.mul_le_mul hK hLF) (Nat.mul_left_comm n 2 n)
   have hpoly : 4000 * (n + 1) ^ 3
       = 4000 * (n * n * n) + 12000 * (n * n) + 12000 * n + 4000 := by ring
   have mid : binBudget K O W LI LC LF ≤
@@ -2354,7 +2333,16 @@ private theorem binBudget_le_poly (n K O W LI LC LF : Nat)
       + 3 * (2 * (n * n) + 2 * n) + 3 * (2 * (n * n) + 2 * n)
       + 60 := by
     unfold binBudget
-    gcongr
+    exact Nat.add_le_add_right (Nat.add_le_add (Nat.add_le_add (Nat.add_le_add
+      (Nat.add_le_add (Nat.add_le_add (Nat.add_le_add (Nat.add_le_add
+        (Nat.add_le_add (Nat.add_le_add_left hO1 1) hOO)
+        (Nat.add_le_add (Nat.add_le_add_left hW1 1) hWW))
+        (Nat.add_le_add (Nat.add_le_add_left hI1 1) hLILI))
+        (Nat.add_le_add (Nat.add_le_add_left hC1 1) hLCLC))
+        (Nat.add_le_add (Nat.add_le_add_left hF1 1) hLFLF))
+        (Nat.add_le_add (Nat.add_le_add hLI hLC) hLF))
+        (Nat.mul_le_mul_left 3 (Nat.add_le_add hKLC hLC)))
+        (Nat.mul_le_mul_left 3 (Nat.add_le_add hKLF hLF))) 60
   refine le_trans mid ?_
   have he : (1 + n * (2 * (n * n + n) + 1) + n * n)
       + (1 + n * (2 * (n * n + n) + 1) + n * n)
@@ -2365,7 +2353,9 @@ private theorem binBudget_le_poly (n K O W LI LC LF : Nat)
       + 3 * (2 * (n * n) + 2 * n) + 3 * (2 * (n * n) + 2 * n)
       + 60 = 86 * (n * n * n) + 172 * (n * n) + 259 * n + 65 := by ring
   rw [he, hpoly]
-  omega
+  exact Nat.add_le_add (Nat.add_le_add (Nat.add_le_add
+    (Nat.mul_le_mul_right _ (by decide)) (Nat.mul_le_mul_right _ (by decide)))
+    (Nat.mul_le_mul_right _ (by decide))) (by decide)
 
 /-! ## The free witness -/
 
