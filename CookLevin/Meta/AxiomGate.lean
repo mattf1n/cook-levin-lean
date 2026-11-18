@@ -81,8 +81,8 @@ def elabAssertLibraryClean : CommandElab := fun stx => do
   let names := env.header.moduleNames
   let data := env.header.moduleData
   let mut offenders : Array (Name × Name) := #[]
-  let mut nModules := 0
-  let mut nDecls := 0
+  let mut nModules : Nat := 0
+  let mut nDecls : Nat := 0
   for i in [0:names.size] do
     let mn := names[i]!
     if root.isPrefixOf mn && !sweepExceptions.contains mn then

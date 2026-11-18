@@ -2421,6 +2421,7 @@ noncomputable def flatCCBin_reductionLang :
         simp only [extractKeyB]
         rw [hBOFF, hBWID, hBINIT, hBCARDS, hBFINAL, hSTEPS]
         rw [FlatCC_to_BinaryCC_instance, dif_pos h]
+        unfold isValidFlattening isValidFlatInitial at h
         show _ = [List.replicate (C.Sigma * C.offset) 1,
           List.replicate (C.Sigma * C.width) 1,
           bitsNat (encodeString (unflattenList C.Sigma C.init h.1)),

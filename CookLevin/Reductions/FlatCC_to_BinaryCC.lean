@@ -468,7 +468,7 @@ theorem BinaryCC_to_CC_lang (C : CC) : BinaryCCLang (CC_to_BinaryCC C) → CC.CC
       Binary_relpower_to_CC_relpower C.cards hk
         (n := C.init.length) (aBits := encodeString C.init) (bBits := sfBits)
         (by simp [encodeString_length]) hstepsBits
-    simpa [decodeStringN_encodeString] using hrel
+    simpa [CC_to_BinaryCC, decodeStringN_encodeString] using hrel
   · have hsfLen : sfBits.length = C.Sigma * C.init.length := by
       rw [← Binary_relpower_length ((CC_to_BinaryCC C).cards) hstepsBits]
       simp [CC_to_BinaryCC, encodeString_length]
@@ -615,7 +615,8 @@ theorem unflattenCards_size {k : Nat} :
       have hcards : isValidFlatCards cards k := by
         intro card' hcard'
         exact h card' (by simp [hcard'])
-      simp [unflattenCards, encodable_size_list_cons, unflattenCard_size, unflattenCards_size, hcard, hcards]
+      simp [unflattenCards, encodable_size_list_cons, unflattenCard_size]
+      exact unflattenCards_size cards hcards
 
 theorem unflattenFinal_size {k : Nat} :
     ∀ final (h : isValidFlatFinal final k), encodable.size (unflattenFinal k final h) = encodable.size final
@@ -625,7 +626,8 @@ theorem unflattenFinal_size {k : Nat} :
       have hfinal : isValidFlatFinal final k := by
         intro s' hs'
         exact h s' (by simp [hs'])
-      simp [unflattenFinal, encodable_size_list_cons, unflattenList_size, unflattenFinal_size, hs, hfinal]
+      simp [unflattenFinal, encodable_size_list_cons, unflattenList_size]
+      exact unflattenFinal_size final hfinal
 
 theorem unflattenCC_size (C : FlatCC) (h : isValidFlattening C) :
     encodable.size (unflattenCC C h) = encodable.size C := by

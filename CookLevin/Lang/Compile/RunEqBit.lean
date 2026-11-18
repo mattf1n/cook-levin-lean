@@ -366,7 +366,7 @@ theorem Compile.navTestRewindM_run_content (s : State) (sc : Var) (res : List Na
     ⟨ClearGadget.ne_of_not_halting (Compile.navTestRewindM_exit_content_is_halt sc) (hpos_traj k hk ck hck),
      ClearGadget.ne_of_not_halting (Compile.navTestRewindM_exit_delim_is_halt sc) (hpos_traj k hk ck hck),
      hpos_traj k hk ck hck⟩), ?_⟩
-  · simpa only [hstate] using hpos.1
+  · simpa only [Compile.navTestRewindM, hstate] using hpos.1
   · have hns := ClearGadget.navSteps_le ((s.take sc).map Compile.shiftReg)
     have hrb := Compile.regBlocks_take_len_le s sc hsc res
     omega
@@ -423,7 +423,7 @@ theorem Compile.navTestRewindM_run_delim (s : State) (sc : Var) (res : List Nat)
     ⟨ClearGadget.ne_of_not_halting (Compile.navTestRewindM_exit_content_is_halt sc) (hneg_traj k hk ck hck),
      ClearGadget.ne_of_not_halting (Compile.navTestRewindM_exit_delim_is_halt sc) (hneg_traj k hk ck hck),
      hneg_traj k hk ck hck⟩), ?_⟩
-  · simpa only [hstate] using hneg.1
+  · simpa only [Compile.navTestRewindM, hstate] using hneg.1
   · have hns := ClearGadget.navSteps_le ((s.take sc).map Compile.shiftReg)
     have hrb := Compile.regBlocks_take_len_le s sc hsc res
     omega
@@ -1421,7 +1421,7 @@ theorem Compile.bitCompareM_run (s : State) (sc1 sc2 : Var) (res : List Nat)
     obtain ⟨hrun, htraj⟩ := Compile.bitCompareM_transport_kept sc1 sc2 _ t _
       (Compile.bitCompareRawM_distinct sc1 sc2).2.1
       (Compile.bitCompareRawM_distinct sc1 sc2).2.2.1 hraw_run hraw_traj
-    exact ⟨t, by simpa using hrun, htraj, by omega⟩
+    exact ⟨t, by simpa [Compile.bitCompareM_exit_match] using hrun, htraj, by omega⟩
   · -- a=0,b=1 → NOMATCH (m01, kept)
     have hE : (Compile.readBitRewindM sc1).states + 0 * (Compile.readBitRewindM sc2).states
         + Compile.readBitRewindRawM_bit sc2 1 = Compile.bitCompareRawM_m01 sc1 sc2 := by
@@ -2281,7 +2281,7 @@ theorem Compile.compareBody_done_run (sc1 sc2 : Var) (right : List Nat) {t₁ : 
   refine ⟨t₁ + 1 + 0, ?_, ?_, by omega⟩
   · have h := hneg.1
     rw [Compile.compareBodyTM_exitDone]
-    simpa using h
+    simpa [Compile.compareBodyTM] using h
   · intro k hk ck hck
     have hnh := hneg_traj k hk ck hck
     exact ⟨ClearGadget.ne_of_not_halting (Compile.compareBodyTM_exitDone_is_halt sc1 sc2) hnh,

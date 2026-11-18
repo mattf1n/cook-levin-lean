@@ -235,7 +235,7 @@ theorem Cmd.eval_op (o : Op) (s : State) :
     (Cmd.op o).eval s = Op.eval o s := rfl
 
 theorem Cmd.eval_seq (c1 c2 : Cmd) (s : State) :
-    (c1 ;; c2).eval s = c2.eval (c1.eval s) := rfl
+    (c1 ;; c2).eval s = c2.eval (c1.eval s) := congrArg id rfl
 
 theorem Cmd.eval_ifBit_true (t : Var) (cT cE : Cmd) (s : State)
     (h : s.get t = [1]) :
@@ -253,7 +253,7 @@ theorem Cmd.cost_op (o : Op) (s : State) :
     (Cmd.op o).cost s = Op.cost o s := rfl
 
 theorem Cmd.cost_seq (c1 c2 : Cmd) (s : State) :
-    (c1 ;; c2).cost s = 1 + c1.cost s + c2.cost (c1.eval s) := rfl
+    (c1 ;; c2).cost s = 1 + c1.cost s + c2.cost (c1.eval s) := congrArg id rfl
 
 theorem Cmd.cost_ifBit_true (t : Var) (cT cE : Cmd) (s : State) (h : s.get t = [1]) :
     (Cmd.ifBit t cT cE).cost s = 1 + cT.cost s := by

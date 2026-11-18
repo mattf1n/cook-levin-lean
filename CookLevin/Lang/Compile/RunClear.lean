@@ -1175,7 +1175,6 @@ theorem Compile.opAppendBit_physical_residue (bit : Nat) (hb : bit ≤ 1)
     intro i hiL hi_lt
     rw [List.get_eq_getElem, List.get_eq_getElem]
     have hc := congrArg (fun l => l[i]?) hTPr
-    simp only [] at hc
     rw [List.getElem?_eq_getElem hiL, List.getElem?_append_left hi_lt,
         List.getElem?_eq_getElem hi_lt] at hc
     exact Option.some.inj hc
@@ -1188,7 +1187,6 @@ theorem Compile.opAppendBit_physical_residue (bit : Nat) (hb : bit ≤ 1)
     intro i hiL hi_ge hir
     rw [List.get_eq_getElem, List.get_eq_getElem]
     have hc := congrArg (fun l => l[i]?) hTPr
-    simp only [] at hc
     rw [List.getElem?_eq_getElem hiL, List.getElem?_append_right hi_ge,
         List.getElem?_eq_getElem hir] at hc
     exact Option.some.inj hc

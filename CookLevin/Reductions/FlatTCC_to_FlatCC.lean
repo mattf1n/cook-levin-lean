@@ -165,8 +165,8 @@ theorem flatten_unflatten_flatTCCCards_to_CCCards {k : Nat} :
       have hcards : FlatTCC.isValidFlatCards cards k := by
         intro card' hcard'
         exact h card' (by simp [hcard'])
-      simp [FlatTCC.unflattenCards, hcard, hcards,
-        flatten_unflatten_flatTCCCard_to_CCCard, flatten_unflatten_flatTCCCards_to_CCCards]
+      simp [FlatTCC.unflattenCards, flatten_unflatten_flatTCCCard_to_CCCard]
+      exact flatten_unflatten_flatTCCCards_to_CCCards cards hcards
 
 theorem flatTCC_to_flatCC_eq (C : FlatTCC) (h : FlatTCC.isValidFlattening C) :
     flatTCC_to_flatCC C = flattenCC (TCC_to_CC (FlatTCC.unflattenTCC C h)) := by
@@ -176,7 +176,8 @@ theorem flatTCC_to_flatCC_eq (C : FlatTCC) (h : FlatTCC.isValidFlattening C) :
           flattenFinal (FlatTCC.unflattenFinal Sigma final h.2.1) = final := by
         simpa [flattenFinal] using FlatTCC.flatten_unflattenFinal Sigma final h.2.1
       simp [flatTCC_to_flatCC, FlatTCC.unflattenTCC, flattenCC, TCC_to_CC,
-        flatten_unflattenList, flatten_unflatten_flatTCCCards_to_CCCards, hfinal]
+        flatten_unflatten_flatTCCCards_to_CCCards, hfinal]
+      exact (flatten_unflattenList Sigma init h.1).symm
 
 theorem flatTCCCard_to_CCCard_size (card : TCCCard Nat) :
     encodable.size (flatTCCCard_to_CCCard card) ≤ encodable.size card + 4 := by

@@ -3605,6 +3605,16 @@ def buildFSATK : Nat :=
   2 * Cmd.flatK (sentBitBody 0) + 2 * Cmd.flatK (bsBody 0)
     + Cmd.flatK readFinBody + 2 * Cmd.flatK cardLenElemBody + 1000
 
+-- Keep closed command costs symbolic instead of reducing their large numerals.
+private theorem buildFSATK_eq {Ks Kb Kr Ke : Nat}
+    (hKs : Ks = Cmd.flatK (sentBitBody 0)) (hKb : Kb = Cmd.flatK (bsBody 0))
+    (hKr : Kr = Cmd.flatK readFinBody) (hKe : Ke = Cmd.flatK cardLenElemBody) :
+    buildFSATK = 2 * Ks + 2 * Kb + Kr + 2 * Ke + 1000 :=
+  congrArg₂ (fun a b => a + 2 * b + 1000)
+    (congrArg₂ (fun a b => a + b)
+      (congrArg₂ (fun a b => 2 * a + 2 * b) hKs.symm hKb.symm) hKr.symm)
+    hKe.symm
+
 /-- The witness's `cost_bound`: `buildFSATK · (masterOmega n + 1)^5`. -/
 def buildFSATBound (n : Nat) : Nat :=
   buildFSATK * ((masterOmega n + 1) * ((masterOmega n + 1) * ((masterOmega n + 1)
@@ -4103,7 +4113,7 @@ theorem buildFSAT_cost_le (C : BinaryCC) :
           + (Kb + 6) * P5 + 8 * P5 + 526 * P5 := by ring
     have hgoal : buildFSATBound n
         = (2 * Ks + 2 * Kb + Kr + 2 * Ke + 1000) * P5 := by
-      rw [buildFSATBound, buildFSATK, ← hKs, ← hKb, ← hKr, ← hKe, ← hΩdef,
+      simp only [buildFSATBound, buildFSATK_eq hKs hKb hKr hKe, ← hΩdef,
         ← hP2, ← hP3, ← hP4, ← hP5]
     rw [hgoal]
     omega
@@ -4159,7 +4169,7 @@ theorem buildFSAT_cost_le (C : BinaryCC) :
       omega
     have hgoal : buildFSATBound n
         = (2 * Ks + 2 * Kb + Kr + 2 * Ke + 1000) * P5 := by
-      rw [buildFSATBound, buildFSATK, ← hKs, ← hKb, ← hKr, ← hKe, ← hΩdef,
+      simp only [buildFSATBound, buildFSATK_eq hKs hKb hKr hKe, ← hΩdef,
         ← hP2, ← hP3, ← hP4, ← hP5]
     rw [hgoal]
     omega

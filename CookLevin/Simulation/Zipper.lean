@@ -98,7 +98,8 @@ theorem zip_write (left : List Nat) (h : Nat) (right : List Nat) (w : Option Nat
   cases w with
   | none => rfl
   | some v =>
-      simp only [writeCurrentTapeSymbol, Zip.write, zip]
+      unfold zip
+      simp only [writeCurrentTapeSymbol, Zip.write]
       by_cases hlt : h < right.length
       · rw [dif_pos hlt]
         have hle : h ≤ right.length := Nat.le_of_lt hlt
@@ -137,7 +138,8 @@ theorem zip_move (left : List Nat) (h : Nat) (right : List Nat) (m : TMMove) :
         refine ⟨?_, List.drop_eq_nil_of_le (by omega), by omega⟩
         rw [List.take_of_length_le (by omega), List.take_of_length_le (by omega)]
   | Lmove =>
-      simp only [moveTapeHead, Zip.move, zip]
+      unfold zip
+      simp only [moveTapeHead, Zip.move]
       by_cases he : h - right.length = 0
       · rw [if_pos he]
         rcases Nat.eq_zero_or_pos h with h0 | hpos

@@ -280,8 +280,7 @@ theorem Compile.opConcat_run (s : State) (sb dst src1 src2 : Var)
   obtain ⟨tA, hA_run, hA_traj, hA_bud⟩ :=
     Compile.opCopy_run s sb src1 hne_sb_src1 hsb hsrc1 hbit res_in hres_in
   -- residue: res_in ++ replicate |s.get sb| 0 = res_in (sb empty); output state = mid1
-  rw [hsbe] at hA_run
-  simp only [List.replicate, List.append_nil] at hA_run
+  simp only [hsbe, List.length_nil, List.replicate_zero, List.append_nil] at hA_run
   rw [← hmid1] at hA_run
   -- Stage B: opCopyAppend sb src2 on mid1
   obtain ⟨tB, hB_run, hB_traj, hB_bud⟩ :=

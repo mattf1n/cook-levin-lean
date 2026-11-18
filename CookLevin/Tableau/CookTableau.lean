@@ -1204,12 +1204,10 @@ theorem rowCell_tape (M : FlatTM) (cfg : FlatTMConfig) {j : Nat}
 theorem confRow_getElem (M : FlatTM) (cfg : FlatTMConfig) {n j : Nat}
     (hj : j ≤ n) (hlt : j < (confRow M cfg n).length) :
     (confRow M cfg n)[j]'hlt = rowCell M cfg j := by
+  unfold confRow at hlt ⊢
   have hpre : j < (bCell M :: (List.range n).map
       (confCell M cfg.state_idx (cfgHead cfg) (cfgRight cfg))).length := by
     simp; omega
-  show ((bCell M :: (List.range n).map
-      (confCell M cfg.state_idx (cfgHead cfg) (cfgRight cfg))) ++ [bCell M])[j]'hlt
-    = rowCell M cfg j
   rw [List.getElem_append_left hpre]
   cases j with
   | zero => rfl
@@ -1221,9 +1219,7 @@ theorem confRow_getElem (M : FlatTM) (cfg : FlatTMConfig) {n j : Nat}
 theorem confRow_getElem_last (M : FlatTM) (cfg : FlatTMConfig) {n : Nat}
     (hlt : n + 1 < (confRow M cfg n).length) :
     (confRow M cfg n)[n + 1]'hlt = bCell M := by
-  show ((bCell M :: (List.range n).map
-      (confCell M cfg.state_idx (cfgHead cfg) (cfgRight cfg))) ++ [bCell M])[n + 1]'_
-    = bCell M
+  unfold confRow at hlt ⊢
   rw [List.getElem_append_right (by simp)]
   simp
 
