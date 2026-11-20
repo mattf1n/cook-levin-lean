@@ -738,8 +738,7 @@ theorem scanRegs_seg (w : Nat) :
       t.drop p = Compile.encodeRegs s' ++ rest →
       Seg w (Compile.encodeRegs s').length ⟨i + 1, [(l, p, t)]⟩
         ⟨i + s'.length + 1, [(l, p + (Compile.encodeRegs s').length, t)]⟩
-  | [], i, p, l, t, rest, _, _, _ => by
-      simpa only [Compile.encodeRegs_nil, List.length_nil, Nat.add_zero] using Seg.zero w _
+  | [], i, p, l, t, rest, _, _, _ => by simpa [Compile.encodeRegs_nil] using Seg.zero w _
   | reg :: s'', i, p, l, t, rest, hlen, hbit, hdrop => by
       have hi : i ≤ w := by
         have : (reg :: s'').length = s''.length + 1 := rfl

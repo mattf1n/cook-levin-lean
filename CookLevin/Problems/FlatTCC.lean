@@ -158,8 +158,7 @@ theorem flatten_unflattenCards (k : Nat) :
       have hcards : isValidFlatCards cards k := by
         intro card' hcard'
         exact h card' (by simp [hcard'])
-      simp [unflattenCards, flatten_unflattenCard]
-      exact flatten_unflattenCards k cards hcards
+      simp [unflattenCards, flatten_unflattenCard, flatten_unflattenCards k cards hcards]
 
 theorem flatten_unflattenFinal (k : Nat) :
     ∀ final (h : isValidFlatFinal final k), (unflattenFinal k final h).map flattenString = final
@@ -169,8 +168,7 @@ theorem flatten_unflattenFinal (k : Nat) :
       have hfinal : isValidFlatFinal final k := by
         intro s' hs'
         exact h s' (by simp [hs'])
-      simp [unflattenFinal, flatten_unflattenList]
-      exact flatten_unflattenFinal k final hfinal
+      simp [unflattenFinal, flatten_unflattenList, flatten_unflattenFinal k final hfinal]
 
 theorem unflatten_flattenCardP {k : Nat} (card : TCCCardP (Fin k)) :
     unflattenCardP k (flattenCardP card) (TCCCardP_ofFlatType_flatten card) = card := by
@@ -205,8 +203,8 @@ theorem flatten_unflattenTCC (C : FlatTCC) (h : isValidFlattening C) :
     flattenTCC (unflattenTCC C h) = C := by
   cases C with
   | mk Sigma init cards final steps =>
-      simp [unflattenTCC, flattenTCC, flatten_unflattenCards]
-      exact ⟨flatten_unflattenList Sigma init h.1, flatten_unflattenFinal Sigma final h.2.1⟩
+      simp [unflattenTCC, flattenTCC, flatten_unflattenList Sigma init h.1, flatten_unflattenCards]
+      exact flatten_unflattenFinal Sigma final h.2.1
 
 theorem unflatten_flattenTCC (C : TCC) :
     unflattenTCC (flattenTCC C) (isValidFlattening_flattenTCC C) = C := by
